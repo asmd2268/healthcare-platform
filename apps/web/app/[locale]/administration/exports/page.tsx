@@ -1,0 +1,1 @@
+export default function Page(){return <section className="page"><h1>Export Center (Placeholder)</h1><button>JSON definition</button><button>CSV definition</button><button disabled>Excel</button><button disabled>PDF</button></section>}

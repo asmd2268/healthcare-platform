@@ -1,0 +1,1 @@
+import {administrationRepository} from '@/features/administration/repository'; export default async function Page(){const items=await administrationRepository.reference();return <section className="page"><h1>Reference Data (Placeholder)</h1>{items.map(x=><p key={x.id}>{x.labelAr} / {x.labelEn} · {x.code}</p>)}</section>}

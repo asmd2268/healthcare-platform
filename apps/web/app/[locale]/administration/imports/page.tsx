@@ -1,0 +1,1 @@
+export default function Page(){return <section className="page"><h1>Import Center (Placeholder)</h1><input type="file"/><input placeholder="Google Sheets URL"/><p>Word and complex file parsing require manual mapping.</p></section>}

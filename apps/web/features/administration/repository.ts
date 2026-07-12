@@ -1,0 +1,3 @@
+export type DemoForm={id:string;nameAr:string;nameEn:string;module:string;version:number;status:'draft'|'published'|'archived';language:'bilingual';updatedAt:string;owner:string};
+export type ReferenceItem={id:string;labelAr:string;labelEn:string;code:string;order:number;active:boolean;archived:boolean;scope:string};
+export const administrationRepository={async forms():Promise<DemoForm[]>{return [{id:'form-1',nameAr:'نموذج تفتيش تجريبي',nameEn:'Demo Inspection Form',module:'inspections',version:1,status:'published',language:'bilingual',updatedAt:'2026-07-13',owner:'Demo Owner'}]},async reference():Promise<ReferenceItem[]>{return [{id:'ref-1',labelAr:'قسم تجريبي',labelEn:'Demo Department',code:'DEMO',order:1,active:true,archived:false,scope:'organization'}]}};
