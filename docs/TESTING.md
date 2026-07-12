@@ -4,3 +4,4 @@
 
 CI في `.github/workflows/ci.yml` يعمل على Pull Requests وفروع `main` و`feature/**` ويشغل install ثم lint وtypecheck وtests وbuild، بلا أسرار إنتاج.
 
+تضيف وحدة التفتيش اختبارات scoring، الأسئلة المطلوبة، الاستثناء N/A، الفشل الحرج، إنشاء Draft version، وإيجاد المخالفات، إضافة إلى اختبار تطابق ترجمات العربية والإنجليزية الموجود.
