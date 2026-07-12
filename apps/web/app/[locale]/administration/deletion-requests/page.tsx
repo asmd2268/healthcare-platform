@@ -1,1 +1,1 @@
-export default function Page(){return <section className="page"><h1>Deletion Requests (Placeholder)</h1><p>Permanent deletion remains disabled until all safeguards are verified by a backend.</p><button disabled>Approve permanent deletion</button></section>}
+import {AdministrationWorkspace} from '@/components/administration/workspace'; export default function Page(){return <AdministrationWorkspace view="deletions"/>}
