@@ -1,0 +1,2 @@
+import {getTranslations} from 'next-intl/server'; import {inspectionRepository} from '@/features/inspections/repository';
+export default async function TemplatesPage(){const t=await getTranslations('inspections.templates');const templates=await inspectionRepository.listTemplates();return <section className="page"><h1>{t('title')}</h1>{templates.map(x=><article key={x.id}><h2>{x.name.en}</h2><p>{t('version')}: 1 · {t('status')}: {x.status}</p></article>)}</section>}
