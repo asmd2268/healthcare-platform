@@ -25,3 +25,7 @@ See [local development](docs/LOCAL_DEVELOPMENT.md), [environment variables](docs
 ## Department Inspections foundation
 
 The first business-module foundation provides configurable bilingual templates, scoring contracts, draft inspection UI, findings, and demonstration reports through a local repository abstraction. Persistence, evidence uploads, PDF/Excel exports, CAPA creation, and production authorization remain explicit placeholders. See the [module documentation](docs/modules/department-inspections.md).
+
+## Platform Administration UI
+
+Administration screens use demonstration repository data and local-only draft interactions. Backend persistence, real authorization, imports, exports, and deletion execution remain placeholders. See [Platform Administration UI](docs/PLATFORM_ADMINISTRATION_UI.md).
