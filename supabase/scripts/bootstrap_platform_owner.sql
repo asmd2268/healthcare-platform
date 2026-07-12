@@ -1,0 +1,3 @@
+-- Controlled bootstrap invocation. The function itself is versioned in the core
+-- migration. Supply verified UUIDs interactively; do not store real values here.
+-- select public.bootstrap_first_platform_owner('<authenticated-user-uuid>', '<tenant-uuid>');

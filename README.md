@@ -4,7 +4,7 @@ This repository is the foundation for a commercial, modular healthcare operation
 
 ## Current status
 
-The Core Platform Foundation is implemented: bilingual shell, initial design system, secure configuration boundaries, and shared contracts. Authentication, persistence, notifications, file upload, workflow execution, and audit undo are explicitly non-production placeholders. The permanent requirements remain in [PROJECT_BIBLE.md](PROJECT_BIBLE.md).
+The Core Platform Foundation is implemented: bilingual shell, initial design system, secure configuration boundaries, and shared contracts. A secure development-ready Supabase/PostgreSQL foundation now adds versioned migrations, Supabase Auth session checks, RLS contracts, platform roles, administration persistence schema, audit-event storage, and fictional local seeds. Notifications, file upload, workflow execution, permanent deletion, and audit undo remain explicit non-production placeholders. The permanent requirements remain in [PROJECT_BIBLE.md](PROJECT_BIBLE.md).
 
 ## Repository map
 
@@ -21,6 +21,8 @@ Confirm the initial product scope, target users, data classification, hosting re
 ## Local development
 
 See [local development](docs/LOCAL_DEVELOPMENT.md), [environment variables](docs/ENVIRONMENT_VARIABLES.md), [core platform](docs/CORE_PLATFORM.md), [testing](docs/TESTING.md), and [threat model](docs/THREAT_MODEL.md).
+
+For local Supabase, run the supported CLI workflow only against a disposable environment: `supabase start`, then `supabase db reset`. This applies migrations and the fictional seed data. See [authentication](docs/AUTHENTICATION.md), [RLS](docs/ROW_LEVEL_SECURITY.md), [multi-tenancy](docs/MULTI_TENANCY.md), and [Platform Owner bootstrap](docs/PLATFORM_OWNER_BOOTSTRAP.md). Never use `db reset` or seed data against production.
 
 ## Department Inspections foundation
 
