@@ -1,3 +1,4 @@
+import {validatePermanentDeletion,type DeletionRequest} from '@healthcare/platform-administration';
 export type DemoForm={id:string;nameAr:string;nameEn:string;module:string;version:number;status:'draft'|'published'|'archived';language:'bilingual';updatedAt:string;owner:string};
 export type ReferenceItem={id:string;labelAr:string;labelEn:string;code:string;order:number;active:boolean;archived:boolean;scope:string};
 export type FormSort='alpha'|'version';
@@ -18,6 +19,14 @@ export function exportCsvDefinition(forms:DemoForm[]){
   const rows=[['id','name_ar','name_en','module','version','status','language','updated_at','owner'],...forms.map(f=>[f.id,f.nameAr,f.nameEn,f.module,String(f.version),f.status,f.language,f.updatedAt,f.owner])];
   return rows.map(row=>row.map(value=>`"${value.replaceAll('"','""')}"`).join(',')).join('\n');
 }
+export const addReferenceItem=(items:ReferenceItem[],item:ReferenceItem)=>[...items,item];
+export const editReferenceItem=(items:ReferenceItem[],id:string,changes:Partial<ReferenceItem>)=>items.map(item=>item.id===id?{...item,...changes}:item);
+export const sortReferenceItems=(items:ReferenceItem[],sort:'name'|'order')=>[...items].sort((a,b)=>sort==='order'?a.order-b.order:a.labelEn.localeCompare(b.labelEn));
+export const moveReferenceItem=(items:ReferenceItem[],id:string,direction:-1|1)=>{const index=items.findIndex(item=>item.id===id);const target=index+direction;if(index<0||target<0||target>=items.length)return items;const next=[...items];[next[index],next[target]]=[next[target],next[index]];return next.map((item,order)=>({...item,order:order+1}));};
+export const archiveReferenceItem=(items:ReferenceItem[],id:string)=>editReferenceItem(items,id,{archived:true});
+export const restoreReferenceItem=(items:ReferenceItem[],id:string)=>editReferenceItem(items,id,{archived:false});
+export const restoreRequiresConfirmation=(selectedRecordId:string|null)=>selectedRecordId!==null;
+export const canApprovePermanentDeletion=(request:DeletionRequest)=>{try{validatePermanentDeletion(request);return true}catch{return false}};
 export const administrationRepository={
   async forms():Promise<DemoForm[]>{return [
     {id:'form-1',nameAr:'نموذج تفتيش تجريبي',nameEn:'Demo Inspection Form',module:'inspections',version:1,status:'published',language:'bilingual',updatedAt:'2026-07-13',owner:'Demo Owner'},
