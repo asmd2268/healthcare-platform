@@ -1,0 +1,11 @@
+{
+  "meta": {"title": "Healthcare Operations Platform", "description": "Secure platform foundation"},
+  "nav": {"home": "Home", "settings": "Settings", "profile": "Profile", "audit": "Recent changes"},
+  "shell": {"organization": "Demo Facility", "notifications": "Notifications", "lock": "Lock session", "userMenu": "User menu", "theme": "Theme", "language": "Language"},
+  "home": {"eyebrow": "Shared foundation", "title": "A platform ready for safe growth", "body": "The bilingual core is prepared for future modules without building a healthcare module yet.", "status": "Current phase: platform foundation"},
+  "auth": {"title": "Sign in", "body": "Secure authentication will be connected to an approved provider later. No demo accounts or passwords exist.", "email": "Email", "password": "Password", "submit": "Continue", "unavailable": "Sign in is not enabled in this environment."},
+  "settings": {"title": "General settings", "body": "Language and theme preferences are stored locally for this phase and will be linked to a user account later."},
+  "profile": {"title": "Profile", "body": "This protected page is awaiting an authentication provider."},
+  "audit": {"title": "Changes in the Last 24 Hours", "body": "This is a preview of the audit-log contract. Undo is not implemented until a secure backend exists.", "placeholder": "Demonstration data only — not an operational audit log."},
+  "system": {"unauthorized": "Unauthorized", "notFound": "Page not found", "error": "An unexpected error occurred", "backHome": "Back to home", "loading": "Loading…", "empty": "No data to display"}
+}

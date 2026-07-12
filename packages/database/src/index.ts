@@ -1,0 +1,9 @@
+export type Organization = {id: string; nameAr: string; nameEn: string};
+export type Facility = {id: string; organizationId: string; nameAr: string; nameEn: string};
+export type Branch = {id: string; facilityId: string; nameAr: string; nameEn: string};
+export type Department = {id: string; facilityId: string; nameAr: string; nameEn: string};
+export type PlatformUser = {id: string; email: string; preferredLocale: 'ar' | 'en'};
+export type UserProfile = {userId: string; displayName: string; preferredLocale: 'ar' | 'en'};
+export type Role = {id: string; key: string; name: string};
+export type Membership = {id: string; userId: string; organizationId: string; facilityId?: string; roleIds: string[]};
+export type DatabaseClient = {provider: 'supabase' | 'firebase' | 'custom'};

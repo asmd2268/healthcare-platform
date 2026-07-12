@@ -1,0 +1,15 @@
+{
+  "name": "healthcare-platform",
+  "private": true,
+  "packageManager": "npm@11.0.0",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "npm run dev --workspace=@healthcare/web",
+    "build": "npm run build --workspace=@healthcare/web",
+    "lint": "npm run lint --workspace=@healthcare/web",
+    "typecheck": "npm run typecheck --workspace=@healthcare/web",
+    "test": "npm run test --workspace=@healthcare/web",
+    "test:unit": "npm run test:unit --workspace=@healthcare/web",
+    "check": "npm run lint && npm run typecheck && npm run test && npm run build"
+  }
+}

@@ -1,0 +1,1 @@
+{"name":"@healthcare/database","private":true,"version":"0.1.0","exports":"./src/index.ts","peerDependencies":{"@supabase/supabase-js":"^2.0.0"}}
