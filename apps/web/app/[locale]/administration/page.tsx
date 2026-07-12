@@ -1,0 +1,1 @@
+import {getTranslations} from 'next-intl/server'; export default async function Administration(){const t=await getTranslations('system');return <section className="page"><h1>{t('loading')}</h1><p>{t('empty')}</p></section>}

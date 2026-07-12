@@ -3,7 +3,7 @@ import createNextIntlPlugin from 'next-intl/plugin';
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  transpilePackages: ['@healthcare/ui', '@healthcare/auth', '@healthcare/database', '@healthcare/permissions', '@healthcare/localization', '@healthcare/branding', '@healthcare/audit', '@healthcare/workflow', '@healthcare/configuration', '@healthcare/inspections'],
+  transpilePackages: ['@healthcare/ui', '@healthcare/auth', '@healthcare/database', '@healthcare/permissions', '@healthcare/localization', '@healthcare/branding', '@healthcare/audit', '@healthcare/workflow', '@healthcare/configuration', '@healthcare/inspections', '@healthcare/platform-administration'],
   async headers() {
     return [{
       source: '/:path*',
