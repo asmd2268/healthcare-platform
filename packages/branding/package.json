@@ -1,1 +1,1 @@
-{"name":"@healthcare/branding","private":true,"version":"0.1.0","exports":"./src/index.ts"}
+{"name":"@healthcare/branding","private":true,"version":"0.1.0","exports":"./src/index.ts","dependencies":{"@healthcare/configuration":"0.1.0"}}
