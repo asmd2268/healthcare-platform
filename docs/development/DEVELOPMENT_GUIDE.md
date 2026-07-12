@@ -2,13 +2,12 @@
 
 ## Status
 
-No development toolchain or coding standards have been selected.
+لا يوجد كود تطبيق بعد، إلا أن المكدس المفضل محدد: Next.js وTypeScript وPostgreSQL/Supabase، مع Vercel وGitHub، وPWA مستقبلي. `PROJECT_BIBLE.md` هو المرجع الملزم قبل أي تنفيذ.
 
 ## Before the first feature
 
-1. Approve the product brief and initial architecture.
-2. Select supported runtimes, package management, formatting, testing, and continuous-integration tools.
+1. Read `PROJECT_BIBLE.md` كاملًا والوثائق ذات الصلة، وتوثيق المخاطر والوحدات المتأثرة وخطة الاختبار.
+2. اعتماد إصدارات runtimes وإدارة الحزم والتنسيق وCI ضمن المكدس المفضل، دون مخالفة المعمارية أو قابلية النقل.
 3. Define environment handling and secret-management practices.
 4. Establish code review, quality gates, and release practices.
-5. Document local setup and verification commands here.
-
+5. وثّق إعداد التطوير، وخطة الترحيل، والتوافق الخلفي، وأوامر التحقق. لا تلمس بيانات إنتاج مباشرة ولا تنفذ Migration مدمرة بلا نسخة احتياطية وخطة تراجع.

@@ -2,7 +2,7 @@
 
 ## Status
 
-Requirements are pending jurisdiction and product-scope confirmation.
+المتطلبات الأمنية الأساسية ملزمة كما في `PROJECT_BIBLE.md` و`docs/SECURITY.md`. تبقى المتطلبات القانونية والتنظيمية التفصيلية حسب الاختصاص القضائي والمنشأة قيد التأكيد؛ ولا يوقف ذلك ضوابط الأمن الأساسية.
 
 ## Baseline expectations
 
@@ -14,4 +14,3 @@ Requirements are pending jurisdiction and product-scope confirmation.
 - Validate applicable privacy, health-data, and security obligations with the organization’s legal and compliance owners.
 
 This document is a planning baseline, not legal or compliance advice.
-
