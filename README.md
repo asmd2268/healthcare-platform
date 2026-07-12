@@ -4,7 +4,7 @@ This repository is the foundation for a commercial, modular healthcare operation
 
 ## Current status
 
-The Core Platform Foundation is implemented: bilingual shell, initial design system, secure configuration boundaries, and shared contracts. The permanent requirements remain in [PROJECT_BIBLE.md](PROJECT_BIBLE.md).
+The Core Platform Foundation is implemented: bilingual shell, initial design system, secure configuration boundaries, and shared contracts. Authentication, persistence, notifications, file upload, workflow execution, and audit undo are explicitly non-production placeholders. The permanent requirements remain in [PROJECT_BIBLE.md](PROJECT_BIBLE.md).
 
 ## Repository map
 

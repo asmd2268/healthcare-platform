@@ -1,10 +1,9 @@
 import 'server-only';
 import {createClient} from '@supabase/supabase-js';
-import {requireServerEnvironment} from './env';
+import {hasSupabasePublicConfig, publicEnvironment} from './env';
 
-export function createServerSupabaseClient() {
-  const environment = requireServerEnvironment();
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!url) throw new Error('NEXT_PUBLIC_SUPABASE_URL must be set on the server before creating a Supabase server client.');
-  return createClient(url, environment.SUPABASE_SERVICE_ROLE_KEY, {auth: {persistSession: false, autoRefreshToken: false}});
+/** Server user client for future authenticated requests and RLS; never bypasses RLS. */
+export function createServerUserSupabaseClient() {
+  if (!hasSupabasePublicConfig) throw new Error('Supabase user client is unavailable until NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are configured.');
+  return createClient(publicEnvironment.NEXT_PUBLIC_SUPABASE_URL!, publicEnvironment.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {auth: {persistSession: false, autoRefreshToken: false}});
 }

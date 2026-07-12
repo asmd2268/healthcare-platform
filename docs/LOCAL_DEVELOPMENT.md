@@ -8,5 +8,4 @@
 2. شغّل `npm install` من جذر المستودع.
 3. شغّل `npm run dev` ثم افتح `/ar` أو `/en`.
 
-الفحوصات: `npm run lint` و`npm run typecheck` و`npm run test` و`npm run build` أو `npm run check` للجميع. لا يوجد مزود مصادقة أو قاعدة بيانات إنتاج في هذه المرحلة؛ الصفحات المحمية تعيد المستخدم إلى واجهة تسجيل الدخول.
-
+الفحوصات: `npm run lint` و`npm run typecheck` و`npm run test` و`npm run build` أو `npm run check` للجميع. استخدم `npm ci` في CI أو بعد وجود lockfile. لا يوجد مزود مصادقة أو قاعدة بيانات إنتاج في هذه المرحلة؛ لا تعد صفحات التطوير المحمية Placeholder مصادقة، والإنتاج يفشل مغلقًا إلى واجهة تسجيل الدخول.
