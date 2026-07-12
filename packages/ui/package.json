@@ -1,0 +1,1 @@
+{"name":"@healthcare/ui","private":true,"version":"0.1.0","exports":"./src/index.tsx","peerDependencies":{"react":"^19.0.0","react-dom":"^19.0.0"}}
