@@ -29,3 +29,5 @@ PostgreSQL هو الأساس المقترح، وSupabase خيار تشغيل. ت
 أضيف `supabase/migrations/202607130001_core_platform_foundation.sql` كأساس versioned لـ PostgreSQL/Supabase. يغطي tenants والنطاقات، profiles والعضويات والأدوار والصلاحيات، الإعدادات والتفضيلات والجلسات الوصفية، سجل التدقيق، الحذف المنطقي وطلبات الحذف، النماذج وإصداراتها وأقسامها وحقولها، البيانات المرجعية، ووظائف الاستيراد والتصدير. لا توجد جداول وحدات صحية نهائية.
 
 تفرض المفاتيح الأجنبية وUUIDs والقيود وrevision للتحديث المتفائل، وتمنع trigger تعديل أو حذف إصدار نموذج منشور. تستخدم كل تغييرات المخطط migrations؛ لا توجد تغييرات Dashboard-only.
+
+تضيف migration التقوية `202607130002_harden_tenant_integrity_audit_and_bootstrap.sql` فهرس uniqueness جزئيًا deterministic لدور Platform Owner العالمي، وقيود composite للمعرفات، وtriggers تتحقق من تطابق tenant/organization/facility عبر hierarchy النماذج والبيانات المرجعية والوظائف. لا تعتمد سلامة cross-tenant على مفاتيح nullable وحدها.

@@ -6,4 +6,4 @@
 4. نفّذ `bootstrapFirstPlatformOwner` من job أو terminal خادمي مراجَع، أو استدعِ الدالة الموضحة في `supabase/scripts/bootstrap_platform_owner.sql` باستخدام اتصال إداري آمن.
 5. تحقق من assignment ودور global وحدث التدقيق، ثم أزل متغير bootstrap إن لم يعد مطلوبًا.
 
-العملية idempotent ولا تعتمد على البريد الإلكتروني ولا يوجد فيها معرف مستخدم حقيقي في المستودع. لا توجد route عامة لتنفيذها، ولا يجب استخدام Service Role Key في المتصفح.
+العملية idempotent ولا تعتمد على البريد الإلكتروني ولا يوجد فيها معرف مستخدم حقيقي في المستودع. يستخدم المخطط partial unique index لدور Platform Owner ذي النطاق global، لذلك لا تنشئ المحاولات المتكررة assignment مكررًا حتى مع قيم النطاق `NULL`. لا توجد route عامة لتنفيذها، ولا يجب استخدام Service Role Key في المتصفح.

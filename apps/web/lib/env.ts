@@ -14,7 +14,7 @@ export const publicEnvironment = publicEnvironmentSchema.parse({
 
 export const hasSupabasePublicConfig = Boolean(publicEnvironment.NEXT_PUBLIC_SUPABASE_URL && publicEnvironment.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
-export const serverUserEnvironmentSchema = z.object({DATABASE_URL: optionalString.pipe(z.string().url().optional())});
+export const serverUserEnvironmentSchema = z.object({DATABASE_URL: optionalString.pipe(z.string().url().optional()),APP_BASE_URL: optionalString.pipe(z.string().url().optional())});
 export const adminEnvironmentSchema = z.object({SUPABASE_SERVICE_ROLE_KEY: optionalString.pipe(z.string().min(1))});
-export const serverUserEnvironment = serverUserEnvironmentSchema.parse({DATABASE_URL: process.env.DATABASE_URL});
+export const serverUserEnvironment = serverUserEnvironmentSchema.parse({DATABASE_URL: process.env.DATABASE_URL,APP_BASE_URL:process.env.APP_BASE_URL});
 export const requireAdminEnvironment = () => adminEnvironmentSchema.parse({SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY});

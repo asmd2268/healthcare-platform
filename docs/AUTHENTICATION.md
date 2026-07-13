@@ -13,3 +13,5 @@ MFA وإدارة الأجهزة والقفل بعد الخمول واجهة أو
 ## التشغيل
 
 أضف فقط `NEXT_PUBLIC_SUPABASE_URL` و`NEXT_PUBLIC_SUPABASE_ANON_KEY` إلى `.env.local` للتشغيل المعتاد. لا يحتاج تسجيل الدخول أو العرض العادي إلى Service Role Key.
+
+إعادة تعيين كلمة المرور تحتاج `APP_BASE_URL` موثقًا وصالحًا في إعداد الخادم. يبني التطبيق callback محليًا من هذا العنوان ومن locale محصور في `ar` أو `en`، ولا يثق في Origin أو forwarded headers الواردة من الطلب.

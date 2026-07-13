@@ -1,0 +1,2 @@
+export const safeLocale=(value:unknown)=>value==='en'?'en':'ar';
+export function passwordResetRedirect(baseUrl:string,locale:unknown){const base=new URL(baseUrl);if(!['http:','https:'].includes(base.protocol))throw new Error('Application base URL must use HTTP or HTTPS.');const redirectTo=new URL('/auth/callback',base);redirectTo.searchParams.set('locale',safeLocale(locale));return redirectTo.toString();}
