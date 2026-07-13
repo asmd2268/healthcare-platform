@@ -15,6 +15,7 @@
     "supabase:target:reset-check": "node scripts/supabase-target-safety.mjs reset",
     "supabase:target:bootstrap-check": "node scripts/supabase-target-safety.mjs bootstrap",
     "supabase:target:seed-check": "node scripts/supabase-target-safety.mjs seed",
-    "supabase:target:sql-tests-check": "node scripts/supabase-target-safety.mjs sql-tests"
+    "supabase:target:sql-tests-check": "node scripts/supabase-target-safety.mjs sql-tests",
+    "test:sql:staging": "bash scripts/run-staging-sql-tests.sh"
   }
 }
