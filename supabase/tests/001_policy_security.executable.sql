@@ -29,5 +29,7 @@ begin
   if to_regprocedure('public.record_policy_event_for_actor(uuid,uuid,uuid,uuid,uuid,uuid,text,text,jsonb)') is null or to_regprocedure('public.append_policy_audit_event_for_actor(uuid,uuid,uuid,uuid,text,text,text,uuid,jsonb)') is null then raise exception 'ASSERT: trusted actor-aware audit path is missing'; end if;
   if has_function_privilege('authenticated','public.record_policy_event_for_actor(uuid,uuid,uuid,uuid,uuid,uuid,text,text,jsonb)','EXECUTE') then raise exception 'ASSERT: authenticated users can forge actor-aware policy events'; end if;
   if not exists(select 1 from information_schema.columns where table_schema='public' and table_name='policy_documents' and column_name='upload_authorization_id') then raise exception 'ASSERT: policy document authorization binding is missing'; end if;
+  if to_regprocedure('public.prepare_draft_policy_document_deletion(uuid)') is null or to_regprocedure('public.complete_draft_policy_document_deletion(uuid)') is null then raise exception 'ASSERT: two-phase policy deletion contract is missing'; end if;
+  if has_function_privilege('authenticated','public.complete_draft_policy_document_deletion(uuid)','EXECUTE') then raise exception 'ASSERT: browser can complete storage-backed deletion'; end if;
 end $$;
 rollback;

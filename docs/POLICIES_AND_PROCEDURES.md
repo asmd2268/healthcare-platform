@@ -54,6 +54,8 @@
 
 تسجل عمليات worker هوية الإنسان الفعلية لا service role: upload يستعمل `policy_upload_authorizations.uploader_id`، والحذف يستعمل actor مُتحققًا من عضويته وصلاحية `policies.edit`. كاتب داخلي غير قابل للتنفيذ من العميل يكتب `policy_events.actor_id` و`audit_events.actor_id` في المعاملة ذاتها؛ فشل التدقيق يلغي finalization أو الحذف. لا تثق الدوال بمعرف actor يرسله المتصفح.
 
+تمنع authorization غير المدعومة قبل الرفع، وتستخدم deletion request من مرحلتين للمستندات draft. يحذف worker Storage أولًا، ولا تحذف metadata إلا عند completion يؤكد غياب object. لا يمكن للدالة القديمة ذات اسم الحذف حذف metadata وحدها. الملفات approved/published/superseded/archived محمية من المسار كله.
+
 يسجل `policy_events` أحداث إنشاء الإصدار، النشر، والإقرار كمسار domain audit موثوق ومقيد، بينما يكون تكامل Audit Engine المركزي عبر خدمة خادمية موثوقة. يجب أن تسجل الخدمات النهائية أيضًا upload/download/archive/restore/metadata edit/approval في مسار التدقيق المعتمد، من دون كشف مفاتيح service-role أو السماح بالكتابة المباشرة من العميل.
 
 ## الحالة الحالية والاختبارات

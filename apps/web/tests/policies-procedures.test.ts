@@ -44,3 +44,10 @@ describe('policies trusted upload and service actor safeguards',()=>{
   it('attributes service operations to validated actors and rolls back on audit failure',()=>{for(const expected of ['append_policy_audit_event_for_actor','record_policy_event_for_actor','p_actor','a.uploader_id','policy_member_in_scope','policy_actor_has_permission','insert into public.audit_events'])expect(sql).toContain(expected)});
   it('derives extension from trusted storage and rejects MIME mismatches',()=>{for(const expected of ['extension:=lower','Policy upload MIME or metadata is invalid',"extension not in ('pdf','docx','doc','xlsx','xls','pptx','jpg','jpeg','png','webp')",'p_mime<>'])expect(sql).toContain(expected)});
 });
+
+describe('policy upload extension and deletion cleanup contracts',()=>{
+  const sql=fs.readFileSync(path.join(process.cwd(),'../../supabase/migrations/202607130020_complete_policy_upload_extension_and_deletion_cleanup.sql'),'utf8');
+  it('rejects unsupported, extensionless, macro, and double-executable names before authorization',()=>{for(const expected of ['authorize_policy_upload',"(pdf|docx|doc|xlsx|xls|pptx|jpg|jpeg|png|webp)",'Unsupported or unsafe policy filename','^[a-z0-9][a-z0-9_-]*'])expect(sql).toContain(expected)});
+  it('uses a two-phase deletion flow that preserves metadata until storage deletion succeeds',()=>{for(const expected of ['policy_document_deletion_requests','prepare_draft_policy_document_deletion','complete_draft_policy_document_deletion','Policy storage deletion must succeed before metadata deletion','delete from public.policy_documents','policy.document_deletion_prepared'])expect(sql).toContain(expected)});
+  it('keeps retained documents out of orphan cleanup and disables the metadata-only deletion API',()=>{for(const expected of ["v.status<>'draft'",'Use prepare_draft_policy_document_deletion and trusted completion','policy_document_deletion_requests_active_unique','storage_delete_failed','expired'])expect(sql).toContain(expected)});
+});
