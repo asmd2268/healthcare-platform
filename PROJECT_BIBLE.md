@@ -570,6 +570,8 @@ Report elements must support localization:
 - Organization branding.
 - Developer attribution.
 
+Shared reporting must use versioned definitions and server-authorized read adapters. Dashboards and exports must enforce tenant, organization, facility, permission, confidentiality, and language boundaries before data leaves the server. Scheduled delivery, caching, and formatted export processing require explicit secure server implementation and must never rely on browser-held credentials.
+
 ---
 
 # MODULE REQUIREMENTS

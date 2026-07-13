@@ -26,6 +26,8 @@ For local Supabase, run the supported CLI workflow only against a disposable env
 
 The shared [Workflow Engine](docs/WORKFLOW_ENGINE.md) establishes reusable versions, transitions, tasks, approvals, comments, events, and SLA/reminder contracts. Module adapters are intentionally limited until each module adopts the engine without weakening existing safeguards.
 
+The shared Reporting and Analytics Engine provides versioned report/dashboard contracts, scoped RLS schema, bilingual administration placeholders, and reusable widget components. It does not replace existing module dashboards or execute production report queries yet.
+
 ## Department Inspections foundation
 
 The first business-module foundation provides configurable bilingual templates, scoring contracts, draft inspection UI, findings, and demonstration reports through a local repository abstraction. Persistence, evidence uploads, PDF/Excel exports, CAPA creation, and production authorization remain explicit placeholders. See the [module documentation](docs/modules/department-inspections.md).

@@ -280,5 +280,8 @@
     "commentPlaceholder": "تعليق تجريبي",
     "attachmentsPlaceholder": "رفع الصور والملفات والأدلة يتطلب إعداد تخزين آمن.",
     "securePersistenceUnavailable": "يتطلب هذا البيئة حفظ مسودات آمنًا عبر الخادم."
+  },
+  "reporting": {
+    "reports":"التقارير", "dashboard":"لوحات المعلومات", "saved":"التقارير المحفوظة", "widgets":"مكتبة الأدوات", "templates":"قوالب التقارير", "placeholder":"تعريفات تجريبية فقط. تنفيذ الاستعلامات والجدولة والحفظ تتطلب تنفيذًا خادميًا مصرحًا به.", "demoData":"بيانات تجريبية معنونة بوضوح — ليست بيانات تشغيلية.", "search":"بحث في التقارير", "module":"الوحدة", "all":"كل الوحدات", "medicationErrors":"أخطاء الدواء", "inspections":"تفتيش الأقسام", "owner":"المالك", "published":"منشور", "chartPlaceholder":"رسم بياني تجريبي", "medicationDashboard":"لوحة أخطاء الدواء", "inspectionDashboard":"لوحة تفتيش الأقسام"
   }
 }
