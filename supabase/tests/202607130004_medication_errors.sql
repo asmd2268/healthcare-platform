@@ -12,3 +12,8 @@
 -- transition_medication_error must allow only the documented edges and permission mapped actor.
 -- A reviewer must not read another reporter's draft; anonymous users must read no reports.
 -- Child rows with mismatched tenant/organization/facility or wrong department scope must fail.
+-- Migration 202607130006 scenarios: revise_medication_error stores one prior snapshot and increments revision once; failed reason/permission leaves no revision or timeline.
+-- Reviewer cannot transition awaiting_approval to approved; approver can, and approved_by/approved_at are set.
+-- Reporter cannot call assign_medication_error; reassignment without reason and cross-scope owner/reviewer are rejected.
+-- transition functions do not increment report revision; closure before approved/verified/notes is rejected.
+-- Direct client insert into revisions/timeline remains denied; note function enforces reviewer/pharmacy vs manager/quality permissions.
