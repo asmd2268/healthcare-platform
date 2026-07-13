@@ -5,3 +5,5 @@
 الأدوار المنظمة أو المنشأة تحتاج تطابق tenant وorganization وfacility، وتفشل الطلبات بلا assignment أو صلاحية بشكل افتراضي. طبقة RLS تعيد تطبيق العزل حتى لو استدعى العميل Supabase مباشرة.
 
 تمنح `platform.view_published_forms` عرض القوالب والإصدارات المنشورة فقط ضمن النطاق. تبقى المسودات وغير المنشور مقيدة بـ`platform.manage_forms`، الذي يلزم للإنشاء والتعديل والإصدار والنشر والأرشفة والاستعادة. لذلك يمكن لمستخدم التفتيش لاحقًا قراءة قالب منشور دون منحه صلاحيات إدارة النماذج.
+
+يمنح المخطط هذه الصلاحية افتراضيًا إلى `organization_administrator` و`facility_administrator` و`scoped_user`، لكن RLS والتحقق من tenant ثم organization ثم facility يظلان مطلوبين. لا تمنح هذه الأدوار `platform.manage_forms` افتراضيًا.
