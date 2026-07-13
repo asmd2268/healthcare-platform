@@ -1,0 +1,3 @@
+import fs from 'node:fs'; import path from 'node:path';
+export function validateSqlTest(text,name='test'){if(!/\b(BEGIN|START\s+TRANSACTION)\s*;/i.test(text))throw new Error(`${name}: transaction start required`);if(!/\bROLLBACK\s*;/i.test(text))throw new Error(`${name}: ROLLBACK required`);if(/\bCOMMIT\s*;/i.test(text))throw new Error(`${name}: COMMIT prohibited`);if(/\b(DROP\s+(DATABASE|SCHEMA|TABLE)|TRUNCATE|ALTER\s+SYSTEM|PG_TERMINATE_BACKEND)\b/i.test(text))throw new Error(`${name}: destructive SQL prohibited`)}
+export function executableFiles(directory){return fs.readdirSync(directory).filter(x=>x.endsWith('.executable.sql')).sort().map(x=>path.join(directory,x))}
