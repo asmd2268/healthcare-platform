@@ -112,3 +112,9 @@ done
 استخدم أسماء خيالية عامة مثل Tenant اختبار A وOrganization اختبار A وFacility اختبار A، ورموزًا مولدة محليًا، ولا تستخدم أسماء مستشفيات أو موظفين أو أدوية حقيقية. لا تنشئ كلمات مرور داخل seed أو SQL. احذف حسابات الاختبار بعد التحقق وفق سياسة Staging.
 
 بعد bootstrap، أزل `PLATFORM_OWNER_BOOTSTRAP_CONFIRMATION` من job المؤقت، واقصر service-role key على مخزن أسرار الخادم. إذا ظهر المفتاح في log أو قناة غير موثوقة، أدره فورًا في Supabase ثم حدّث secret manager وأعد التحقق. افحص المستودع والتاريخ قبل النشر باستخدام أدوات فحص الأسرار المعتمدة؛ لا تنسخ قيمة مشبوهة إلى tickets أو PRs. راجع `git log -p` في بيئة آمنة وفحص CI للأسرار، ثم عالج أي كشف باعتباره تسربًا حتى لو حُذف لاحقًا من working tree.
+
+## اختبارات SQL التنفيذية
+
+شغّل `SUPABASE_ENV=staging DATABASE_URL=<secret> npm run test:sql:staging`. لا يعيد runner ضبط قاعدة البيانات، ويرفض هدفًا يبدو إنتاجيًا، ويشغّل فقط ملفات `*.executable.sql` بالترتيب ثم يتراجع عن كل transaction. لا يطبع عنوان قاعدة البيانات أو كلمة المرور. `000_staging_security.executable.sql` قابل للتنفيذ؛ بقية ملفات `supabase/tests` الحالية جزئية أو تعليقات/قوالب pgTAP وليست دليل نجاح حتى تتحول إلى assertions تنفيذية.
+
+لا يضمن runner التراجع عن SQL عشوائي؛ كل ملف executable يجب أن يضم `BEGIN` و`ROLLBACK` حقيقيين. يفحص runner هذه convention فقط وليس SQL parser كاملًا، ولا يعيد ضبط قاعدة Staging المخصصة. تستخدم الاختبارات بيانات خيالية فقط، وهي smoke tests أمنية وليست شهادة تغطية RLS كاملة.
