@@ -13,6 +13,7 @@
   "dependencies": {
     "@healthcare/inspections": "0.1.0",
     "@healthcare/medication-errors": "0.1.0",
+    "@healthcare/policies-procedures": "0.1.0",
     "@healthcare/platform-administration": "0.1.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.49.0",

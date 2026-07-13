@@ -283,5 +283,8 @@
   },
   "reporting": {
     "reports":"التقارير", "dashboard":"لوحات المعلومات", "saved":"التقارير المحفوظة", "widgets":"مكتبة الأدوات", "templates":"قوالب التقارير", "placeholder":"تعريفات تجريبية فقط. تنفيذ الاستعلامات والجدولة والحفظ تتطلب تنفيذًا خادميًا مصرحًا به.", "demoData":"بيانات تجريبية معنونة بوضوح — ليست بيانات تشغيلية.", "search":"بحث في التقارير", "module":"الوحدة", "all":"كل الوحدات", "medicationErrors":"أخطاء الدواء", "inspections":"تفتيش الأقسام", "owner":"المالك", "published":"منشور", "chartPlaceholder":"رسم بياني تجريبي", "medicationDashboard":"لوحة أخطاء الدواء", "inspectionDashboard":"لوحة تفتيش الأقسام"
+  },
+  "policies": {
+    "nav":"السياسات والإجراءات", "library":"مكتبة السياسات", "dashboard":"لوحة السياسات", "demoNotice":"بيانات تجريبية فقط. الحفظ الآمن ورفع المستندات وتنفيذ سير العمل تتطلب خدمات خادمية مصرحًا بها.", "search":"ابحث بالعنوان أو رقم السياسة", "status":"الحالة", "all":"كل الحالات", "draft":"مسودة", "under_review":"قيد المراجعة", "approved":"معتمدة", "published":"منشورة", "superseded":"استُبدلت", "archived":"مؤرشفة", "owner":"المالك", "version":"الإصدار", "preview":"معاينة", "createVersion":"إنشاء إصدار مسودة", "archive":"أرشفة", "versionCreated":"تم إنشاء إصدار مسودة تجريبي محليًا.", "demoChangeSummary":"مراجعة تجريبية", "untitled":"سياسة بلا عنوان", "drafts":"مسودات السياسات", "upcomingReviews":"المراجعات القادمة", "readCompletion":"إكمال القراءة"
   }
 }
