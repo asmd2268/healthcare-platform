@@ -1,0 +1,12 @@
+import {describe,expect,it} from 'vitest';
+import {projectRefFromUrl,validateSupabaseTarget} from '../../../scripts/supabase-target-safety.mjs';
+
+const stagingEnvironment={SUPABASE_ENV:'staging',NEXT_PUBLIC_SUPABASE_URL:'https://validation-target.invalid',NEXT_PUBLIC_SUPABASE_ANON_KEY:'configured-value',APP_BASE_URL:'https://staging-app.invalid'};
+describe('Supabase staging target safety',()=>{
+  it('prints a project reference without requiring a secret',()=>{expect(projectRefFromUrl(stagingEnvironment.NEXT_PUBLIC_SUPABASE_URL)).toBe('validation-target.invalid');expect(validateSupabaseTarget(stagingEnvironment)).toMatchObject({projectRef:'validation-target.invalid',stage:'staging',action:'check'});});
+  it('refuses incomplete or unclassified environments',()=>{expect(()=>validateSupabaseTarget({...stagingEnvironment,NEXT_PUBLIC_SUPABASE_ANON_KEY:''})).toThrow('Missing required');expect(()=>validateSupabaseTarget({...stagingEnvironment,SUPABASE_ENV:''})).toThrow('explicitly local or staging');});
+  it('refuses production-looking targets without an explicit override',()=>{const productionLike={...stagingEnvironment,NEXT_PUBLIC_SUPABASE_URL:'https://platform-production.invalid'};expect(()=>validateSupabaseTarget(productionLike)).toThrow('Refusing');expect(validateSupabaseTarget({...productionLike,ALLOW_PRODUCTION_SUPABASE_COMMANDS:'I_UNDERSTAND_THIS_IS_PRODUCTION'})).toMatchObject({overridden:true});});
+  it('requires an explicit safe environment for reset checks',()=>{expect(validateSupabaseTarget(stagingEnvironment,'reset')).toMatchObject({action:'reset'});expect(()=>validateSupabaseTarget({...stagingEnvironment,SUPABASE_ENV:'production'},'reset')).toThrow();});
+  it('requires admin-only variables only for bootstrap validation',()=>{expect(()=>validateSupabaseTarget(stagingEnvironment,'bootstrap')).toThrow('admin-only');expect(validateSupabaseTarget({...stagingEnvironment,SUPABASE_SERVICE_ROLE_KEY:'configured-value',PLATFORM_OWNER_BOOTSTRAP_CONFIRMATION:'configured-value'},'bootstrap')).toMatchObject({action:'bootstrap'});});
+  it('requires an administrative connection only for seed and SQL-test checks',()=>{expect(()=>validateSupabaseTarget(stagingEnvironment,'seed')).toThrow('DATABASE_URL');expect(validateSupabaseTarget({...stagingEnvironment,DATABASE_URL:'postgresql://configured-value@validation-target.invalid/database'},'sql-tests')).toMatchObject({action:'sql-tests'});});
+});

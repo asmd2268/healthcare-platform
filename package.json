@@ -10,6 +10,11 @@
     "typecheck": "npm run typecheck --workspace=@healthcare/web",
     "test": "npm run test --workspace=@healthcare/web",
     "test:unit": "npm run test:unit --workspace=@healthcare/web",
-    "check": "npm run lint && npm run typecheck && npm run test && npm run build"
+    "check": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "supabase:target:check": "node scripts/supabase-target-safety.mjs check",
+    "supabase:target:reset-check": "node scripts/supabase-target-safety.mjs reset",
+    "supabase:target:bootstrap-check": "node scripts/supabase-target-safety.mjs bootstrap",
+    "supabase:target:seed-check": "node scripts/supabase-target-safety.mjs seed",
+    "supabase:target:sql-tests-check": "node scripts/supabase-target-safety.mjs sql-tests"
   }
 }
