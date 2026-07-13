@@ -1,0 +1,19 @@
+-- Disposable SQL validation scenarios for Medication Errors; run only after
+-- migration 202607130004 on local or staging fictional data.
+-- Verify RLS denies anonymous access and cross-tenant/organization/facility reads.
+-- Verify a scoped user with medication_errors.view reads only in-scope reports.
+-- Verify a draft reporter can edit only their draft with medication_errors.edit_draft.
+-- Verify submitted clinical fields reject direct mutation and require a revision.
+-- Verify confidential comments require medication_errors.review.
+-- Verify attachments remain metadata-only until private storage and signed URLs are configured.
+-- Migration 202607130005 adds controlled transition and integrity scenarios:
+-- Directly changing reporter, tenant, organization, facility, reference number, or any material clinical field after submit must fail.
+-- Direct insert into revision or timeline by an ordinary authenticated client must fail.
+-- transition_medication_error must allow only the documented edges and permission mapped actor.
+-- A reviewer must not read another reporter's draft; anonymous users must read no reports.
+-- Child rows with mismatched tenant/organization/facility or wrong department scope must fail.
+-- Migration 202607130006 scenarios: revise_medication_error stores one prior snapshot and increments revision once; failed reason/permission leaves no revision or timeline.
+-- Reviewer cannot transition awaiting_approval to approved; approver can, and approved_by/approved_at are set.
+-- Reporter cannot call assign_medication_error; reassignment without reason and cross-scope owner/reviewer are rejected.
+-- transition functions do not increment report revision; closure before approved/verified/notes is rejected.
+-- Direct client insert into revisions/timeline remains denied; note function enforces reviewer/pharmacy vs manager/quality permissions.
