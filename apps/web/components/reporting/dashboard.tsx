@@ -1,0 +1,4 @@
+'use client';
+import {useTranslations} from 'next-intl'; import type {DashboardWidget} from '@healthcare/reporting';
+export function SharedDashboard({widgets}:{widgets:DashboardWidget[]}){const t=useTranslations('reporting');return <section className="ui-grid" aria-label={t('dashboard')}>
+ {widgets.map((widget,index)=><article className="ui-card" key={widget.id}><h2>{widget.title.ar&&widget.title.en?widget.title.ar+' / '+widget.title.en:widget.title.en??widget.title.ar}</h2>{['kpi_card','counter','gauge'].includes(widget.type)?<strong>{String(widget.configuration.value??index+1)}</strong>:<div aria-label={t('chartPlaceholder')} className="report-chart">{Array.from({length:5},(_,bar)=><i key={bar} style={{height:`${25+((index+bar)*17)%70}%`}}/>)}</div>}<small>{t('demoData')}</small></article>)}</section>}

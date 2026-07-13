@@ -280,5 +280,8 @@
     "commentPlaceholder": "Demonstration comment",
     "attachmentsPlaceholder": "Photo, file, and evidence uploads require secure storage configuration.",
     "securePersistenceUnavailable": "Secure server-backed draft persistence is required in this environment."
+  },
+  "reporting": {
+    "reports":"Reports", "dashboard":"Dashboards", "saved":"Saved Reports", "widgets":"Widget Library", "templates":"Report Templates", "placeholder":"Demonstration definitions only. Query execution, scheduling, and persistence require an authorized server implementation.", "demoData":"Clearly labelled demonstration data — not operational data.", "search":"Search reports", "module":"Module", "all":"All modules", "medicationErrors":"Medication Errors", "inspections":"Department Inspections", "owner":"Owner", "published":"Published", "chartPlaceholder":"Demonstration chart", "medicationDashboard":"Medication Error Dashboard", "inspectionDashboard":"Inspection Dashboard"
   }
 }
