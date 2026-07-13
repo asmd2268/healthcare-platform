@@ -1,0 +1,8 @@
+-- Disposable SQL validation scenarios for Medication Errors; run only after
+-- migration 202607130004 on local or staging fictional data.
+-- Verify RLS denies anonymous access and cross-tenant/organization/facility reads.
+-- Verify a scoped user with medication_errors.view reads only in-scope reports.
+-- Verify a draft reporter can edit only their draft with medication_errors.edit_draft.
+-- Verify submitted clinical fields reject direct mutation and require a revision.
+-- Verify confidential comments require medication_errors.review.
+-- Verify attachments remain metadata-only until private storage and signed URLs are configured.
