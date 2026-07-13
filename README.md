@@ -24,6 +24,8 @@ See [local development](docs/LOCAL_DEVELOPMENT.md), [environment variables](docs
 
 For local Supabase, run the supported CLI workflow only against a disposable environment: `supabase start`, then `supabase db reset`. This applies migrations and the fictional seed data. See [authentication](docs/AUTHENTICATION.md), [RLS](docs/ROW_LEVEL_SECURITY.md), [multi-tenancy](docs/MULTI_TENANCY.md), and [Platform Owner bootstrap](docs/PLATFORM_OWNER_BOOTSTRAP.md). Never use `db reset` or seed data against production.
 
+The shared [Workflow Engine](docs/WORKFLOW_ENGINE.md) establishes reusable versions, transitions, tasks, approvals, comments, events, and SLA/reminder contracts. Module adapters are intentionally limited until each module adopts the engine without weakening existing safeguards.
+
 ## Department Inspections foundation
 
 The first business-module foundation provides configurable bilingual templates, scoring contracts, draft inspection UI, findings, and demonstration reports through a local repository abstraction. Persistence, evidence uploads, PDF/Excel exports, CAPA creation, and production authorization remain explicit placeholders. See the [module documentation](docs/modules/department-inspections.md).
