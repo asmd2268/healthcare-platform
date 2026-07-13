@@ -6,3 +6,6 @@ begin;
 -- Updating/deleting a published report_version must raise “Published report versions are immutable”.
 -- Inserting a report_version or dashboard_widget with a parent from another scope must raise 23503.
 rollback;
+-- Migration 015 scenarios: authorized publish_report_version and publish_dashboard append audit_events;
+-- authorized request_report_export appends report.export_requested; direct append_reporting_audit_event
+-- and direct insert into audit_events are denied. Force the bridge to raise and verify publication/export rollback.
