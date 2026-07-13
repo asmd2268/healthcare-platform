@@ -52,6 +52,8 @@
 
 لا تنفذ الواجهة finalization للمستند. تنشئ `authorize_policy_upload` authorization مؤقتًا لمسودة، ثم تنفذ خدمة server-only `finalize_policy_document_verified` فحص وجود object في bucket `policy-documents`، المسار، الحجم، عدم التكرار، وحالة فحص malware قبل metadata. لا يتحقق SQL من checksum فعليًا؛ يتحقق worker خادمي موثوق منه قبل finalization. حذف ملف المسودة يتم بخدمة server-only موثقة فقط؛ الملفات المنشورة أو المعتمدة أو المستبدلة أو المؤرشفة لا تحذف. ينظف orphan uploads غير النهائية بعد 15 دقيقة أو فترة تشغيلية محافظة، مع مراجعة قبل الحذف.
 
+تسجل عمليات worker هوية الإنسان الفعلية لا service role: upload يستعمل `policy_upload_authorizations.uploader_id`، والحذف يستعمل actor مُتحققًا من عضويته وصلاحية `policies.edit`. كاتب داخلي غير قابل للتنفيذ من العميل يكتب `policy_events.actor_id` و`audit_events.actor_id` في المعاملة ذاتها؛ فشل التدقيق يلغي finalization أو الحذف. لا تثق الدوال بمعرف actor يرسله المتصفح.
+
 يسجل `policy_events` أحداث إنشاء الإصدار، النشر، والإقرار كمسار domain audit موثوق ومقيد، بينما يكون تكامل Audit Engine المركزي عبر خدمة خادمية موثوقة. يجب أن تسجل الخدمات النهائية أيضًا upload/download/archive/restore/metadata edit/approval في مسار التدقيق المعتمد، من دون كشف مفاتيح service-role أو السماح بالكتابة المباشرة من العميل.
 
 ## الحالة الحالية والاختبارات

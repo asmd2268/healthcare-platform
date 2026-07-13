@@ -36,3 +36,11 @@ describe('policies archival, approval, and upload safeguards',()=>{
   it('requires a private bucket and trusted verification before metadata finalization',()=>{for(const expected of ["p_bucket <> 'policy-documents'",'finalize_policy_document_verified','Trusted policy upload finalization requires service role','storage.objects','expected_checksum','malware_scan_status','revoke all on function public.finalize_policy_document'])expect(sql).toContain(expected)});
   it('keeps deletion server-controlled and draft-only',()=>{for(const expected of ['delete_draft_policy_document','Trusted policy document deletion requires service role',"v.status<>'draft'",'policy_actor_has_permission','policy.document_deleted'])expect(sql).toContain(expected)});
 });
+
+describe('policies trusted upload and service actor safeguards',()=>{
+  const sql=fs.readFileSync(path.join(process.cwd(),'../../supabase/migrations/202607130019_bind_policy_uploads_to_trusted_authorization_and_audit_actors.sql'),'utf8');
+  it('binds storage insertion to the active uploader authorization',()=>{for(const expected of ['a.storage_key=p_name','a.uploader_id=auth.uid()','a.expires_at>now()','a.finalized_at is null',"x.status='draft'",'policy_documents_storage_insert'])expect(sql).toContain(expected)});
+  it('prevents authorization reuse and requires trusted checksum and scan states',()=>{for(const expected of ['upload_authorization_id','policy_documents_upload_authorization_unique','a.finalized_at is not null','checksum_verification_status','<>\'verified\'','Policy malware scan is not accepted'])expect(sql).toContain(expected)});
+  it('attributes service operations to validated actors and rolls back on audit failure',()=>{for(const expected of ['append_policy_audit_event_for_actor','record_policy_event_for_actor','p_actor','a.uploader_id','policy_member_in_scope','policy_actor_has_permission','insert into public.audit_events'])expect(sql).toContain(expected)});
+  it('derives extension from trusted storage and rejects MIME mismatches',()=>{for(const expected of ['extension:=lower','Policy upload MIME or metadata is invalid',"extension not in ('pdf','docx','doc','xlsx','xls','pptx','jpg','jpeg','png','webp')",'p_mime<>'])expect(sql).toContain(expected)});
+});
