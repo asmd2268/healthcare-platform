@@ -28,3 +28,11 @@ describe('policies lifecycle and storage hardening',()=>{
   it('uses a private, scope-checked storage bucket and rejects macro files',()=>{for(const expected of ["'policy-documents'","public=false",'policy_storage_object_allowed','policy_documents_storage_insert','docm|xlsm|pptm','Policy document storage path is unsafe'])expect(sql).toContain(expected)});
   it('requires same-scope user and link targets',()=>{for(const expected of ['Policy user reference is outside scope','Policy document uploader is outside scope','Policy link target is invalid or outside scope','Policy link adapter is not implemented'])expect(sql).toContain(expected)});
 });
+
+describe('policies archival, approval, and upload safeguards',()=>{
+  const sql=fs.readFileSync(path.join(process.cwd(),'../../supabase/migrations/202607130018_complete_policy_archival_approval_upload_safeguards.sql'),'utf8');
+  it('hides archived and draft content from ordinary policy viewers while allowing explicit history',()=>{for(const expected of ['policies.view_history',"d.status='published' and status='published'","status='archived'","policy_definitions_read","policy_versions_read","can_view_policy_document"])expect(sql).toContain(expected)});
+  it('separates submitting and approving from editing and ownership',()=>{for(const expected of ['policies.submit','policies.override_approval_assignment','auth.uid()=v.created_by','auth.uid()=d.owner_id','d.approver_id<>auth.uid()','Policy approval denied'])expect(sql).toContain(expected)});
+  it('requires a private bucket and trusted verification before metadata finalization',()=>{for(const expected of ["p_bucket <> 'policy-documents'",'finalize_policy_document_verified','Trusted policy upload finalization requires service role','storage.objects','expected_checksum','malware_scan_status','revoke all on function public.finalize_policy_document'])expect(sql).toContain(expected)});
+  it('keeps deletion server-controlled and draft-only',()=>{for(const expected of ['delete_draft_policy_document','Trusted policy document deletion requires service role',"v.status<>'draft'",'policy_actor_has_permission','policy.document_deleted'])expect(sql).toContain(expected)});
+});

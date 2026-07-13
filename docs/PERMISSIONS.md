@@ -18,4 +18,6 @@
 
 تستخدم الوحدة `policies.view` و`create` و`edit` و`review` و`approve` و`publish` و`archive` و`restore` و`acknowledge` و`export` و`manage_configuration`. تفصل خصوصية الإقرار عبر `policies.view_acknowledgements` لعرض حالة الموظفين داخل النطاق و`policies.manage_acknowledgements` للإدارة. لا تمنح `policies.view` إقرارات الآخرين ولا المسودات أو مستندات المراجعة.
 
+تضيف lifecycle safeguards صلاحيات `policies.view_history` للتعريفات المؤرشفة والنسخ المستبدلة، و`policies.submit` لإرسال مسودة المالك/المحرر، و`policies.override_approval_assignment` لتجاوز المعتمد المعيّن عند التفويض الصريح. الثلاثة لا تُمنح افتراضيًا إلا لـPlatform Owner؛ لا يمنح `policies.review` حق الإرسال وحده، ولا يستطيع مالك السياسة أو منشئ النسخة اعتمادها.
+
 تضيف إدارة المنصة صلاحيات `platform.full_access` وإدارة الوحدات والنماذج والحقول والبيانات المرجعية والسجلات والاستيراد/التصدير وطلبات schema والاستعادة والحذف الدائم والتدقيق والأدوار والصلاحيات والعلامة والترخيص؛ تتحقق من نطاق global/organization/facility على الخادم.

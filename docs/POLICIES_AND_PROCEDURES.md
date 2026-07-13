@@ -44,6 +44,14 @@
 
 يقرأ المستخدم إقراره فقط. تتطلب قراءة إقرارات الموظفين داخل النطاق `policies.view_acknowledgements`، وتحتاج إدارة الحملات والتذكيرات `policies.manage_acknowledgements`. لا تكفي `policies.view` لقراءة إقرارات الآخرين.
 
+## ضوابط الأرشفة والاعتماد والرفع
+
+لا يرى حامل `policies.view` إلا definition منشورًا ونسخته المنشورة النشطة. لا يظهر التعريف المؤرشف أو النسخة المستبدلة/التاريخية إلا مع `policies.view_history` داخل النطاق. تنطبق القاعدة نفسها على metadata والتنزيل وStorage SELECT، بينما تظهر المسودة للمحرر فقط، وتظهر `under_review` للمراجع أو المعتمد، وتظهر `approved` للمعتمد أو الناشر.
+
+الإرسال يتطلب `policies.edit` و`policies.submit`، فلا تمنح مراجعة السياسات حق الإرسال وحدها. الاعتماد يتطلب `policies.approve`، ويفحص المعتمد المعيّن إن وجد؛ لا يستطيع المالك أو منشئ النسخة اعتمادها. تجاوز التعيين يحتاج `policies.override_approval_assignment` ولا يمنح افتراضيًا إلا لـPlatform Owner.
+
+لا تنفذ الواجهة finalization للمستند. تنشئ `authorize_policy_upload` authorization مؤقتًا لمسودة، ثم تنفذ خدمة server-only `finalize_policy_document_verified` فحص وجود object في bucket `policy-documents`، المسار، الحجم، عدم التكرار، وحالة فحص malware قبل metadata. لا يتحقق SQL من checksum فعليًا؛ يتحقق worker خادمي موثوق منه قبل finalization. حذف ملف المسودة يتم بخدمة server-only موثقة فقط؛ الملفات المنشورة أو المعتمدة أو المستبدلة أو المؤرشفة لا تحذف. ينظف orphan uploads غير النهائية بعد 15 دقيقة أو فترة تشغيلية محافظة، مع مراجعة قبل الحذف.
+
 يسجل `policy_events` أحداث إنشاء الإصدار، النشر، والإقرار كمسار domain audit موثوق ومقيد، بينما يكون تكامل Audit Engine المركزي عبر خدمة خادمية موثوقة. يجب أن تسجل الخدمات النهائية أيضًا upload/download/archive/restore/metadata edit/approval في مسار التدقيق المعتمد، من دون كشف مفاتيح service-role أو السماح بالكتابة المباشرة من العميل.
 
 ## الحالة الحالية والاختبارات

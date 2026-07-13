@@ -23,5 +23,8 @@ begin
   if not exists(select 1 from storage.buckets where id='policy-documents' and public=false) then raise exception 'ASSERT: private policy storage bucket missing'; end if;
   if not exists(select 1 from pg_policies where schemaname='storage' and tablename='objects' and policyname='policy_documents_storage_insert') then raise exception 'ASSERT: scoped policy storage insert policy missing'; end if;
   if exists(select 1 from pg_policies where schemaname='storage' and tablename='objects' and policyname in ('policy_documents_storage_update','policy_documents_storage_delete')) then raise exception 'ASSERT: unsafe policy storage mutation policy exists'; end if;
+  if to_regprocedure('public.approve_policy_version(uuid)') is null or to_regprocedure('public.authorize_policy_upload(uuid,text,bigint,text)') is null or to_regprocedure('public.finalize_policy_document_verified(uuid,text,public.content_language,text,boolean,text,text)') is null or to_regprocedure('public.delete_draft_policy_document(uuid,uuid)') is null then raise exception 'ASSERT: archival approval or upload safeguard is missing'; end if;
+  if exists(select 1 from pg_policies where schemaname='public' and tablename='policy_definitions' and policyname='policy_definitions_read' and qual not like '%view_history%') then raise exception 'ASSERT: policy definition history visibility is not explicit'; end if;
+  if has_function_privilege('authenticated','public.finalize_policy_document(uuid,text,text,text,text,bigint,public.content_language,text,boolean,text,text)','EXECUTE') then raise exception 'ASSERT: browser metadata finalization remains executable'; end if;
 end $$;
 rollback;
