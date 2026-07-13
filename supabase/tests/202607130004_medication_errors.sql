@@ -6,3 +6,9 @@
 -- Verify submitted clinical fields reject direct mutation and require a revision.
 -- Verify confidential comments require medication_errors.review.
 -- Verify attachments remain metadata-only until private storage and signed URLs are configured.
+-- Migration 202607130005 adds controlled transition and integrity scenarios:
+-- Directly changing reporter, tenant, organization, facility, reference number, or any material clinical field after submit must fail.
+-- Direct insert into revision or timeline by an ordinary authenticated client must fail.
+-- transition_medication_error must allow only the documented edges and permission mapped actor.
+-- A reviewer must not read another reporter's draft; anonymous users must read no reports.
+-- Child rows with mismatched tenant/organization/facility or wrong department scope must fail.

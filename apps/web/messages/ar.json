@@ -278,6 +278,7 @@
     "submit": "إرسال البلاغ",
     "addComment": "إضافة تعليق",
     "commentPlaceholder": "تعليق تجريبي",
-    "attachmentsPlaceholder": "رفع الصور والملفات والأدلة يتطلب إعداد تخزين آمن."
+    "attachmentsPlaceholder": "رفع الصور والملفات والأدلة يتطلب إعداد تخزين آمن.",
+    "securePersistenceUnavailable": "يتطلب هذا البيئة حفظ مسودات آمنًا عبر الخادم."
   }
 }

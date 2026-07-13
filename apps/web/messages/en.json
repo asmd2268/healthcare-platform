@@ -278,6 +278,7 @@
     "submit": "Submit report",
     "addComment": "Add comment",
     "commentPlaceholder": "Demonstration comment",
-    "attachmentsPlaceholder": "Photo, file, and evidence uploads require secure storage configuration."
+    "attachmentsPlaceholder": "Photo, file, and evidence uploads require secure storage configuration.",
+    "securePersistenceUnavailable": "Secure server-backed draft persistence is required in this environment."
   }
 }
