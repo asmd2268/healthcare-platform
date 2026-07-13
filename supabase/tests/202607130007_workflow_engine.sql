@@ -1,0 +1,1 @@
+-- Disposable SQL scenarios: anonymous cannot read workflow instances; scoped user cannot cross tenant/organization/facility; published versions reject update/delete; confidential comments require workflows.view_confidential_comments; ordinary user cannot forge system workflow events.
