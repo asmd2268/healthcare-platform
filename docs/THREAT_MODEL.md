@@ -14,3 +14,7 @@
 - **الترخيص:** منطق الاستحقاقات والتحقق على الخادم فقط؛ لا أسرار أو مفاتيح في العميل.
 - **CSP:** يسمح `script-src 'unsafe-inline'` و`style-src 'unsafe-inline'` مؤقتًا لتوافق Next.js الحالي؛ يجب تشديدهما باستخدام nonce/hash قبل التعامل مع بيانات حساسة أو نشر الإنتاج.
 - **الويب:** headers أمنية، تحقق إدخال، ترميز إخراج، CSRF حيث ينطبق، ومنع `dangerouslySetInnerHTML` بلا sanitization.
+- **Supabase Auth وRLS:** Middleware يتحقق من المستخدم عبر Supabase وليس Cookie عشوائيًا، وتطبق RLS عزل tenant/organization/facility. اختبارات cross-tenant المحلية مطلوبة قبل الإنتاج.
+- **Service Role:** لا يستورد عميل admin إلا من module `server-only` لعملية bootstrap مراجعة. أي استخدام في طلبات المستخدمين أو UI يعد تصعيد صلاحيات.
+- **Bootstrap:** يتطلب UUID لمستخدم Auth موجود وتأكيد خادمي وعملية idempotent وسجل تدقيق، ولا توجد route عامة له.
+- **سلامة الإصدارات:** إصدارات النماذج المنشورة immutable في قاعدة البيانات؛ المسودات تستخدم revision لمنع الكتابة فوق تعديل أحدث.

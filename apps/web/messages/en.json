@@ -15,7 +15,8 @@
     "lock": "Lock session",
     "userMenu": "User menu",
     "theme": "Theme",
-    "language": "Language"
+    "language": "Language",
+    "signOut": "Sign out"
   },
   "home": {
     "eyebrow": "Shared foundation",
@@ -29,7 +30,10 @@
     "email": "Email",
     "password": "Password",
     "submit": "Continue",
-    "unavailable": "Sign in is not enabled in this environment."
+    "unavailable": "Sign in is not enabled in this environment.",
+    "resetRequest": "Request password reset",
+    "resetRequestHint": "A reset link will be sent if this account is eligible.",
+    "authFailed": "Sign-in or reset request could not be completed."
   },
   "settings": {
     "title": "General settings",
@@ -37,12 +41,15 @@
   },
   "profile": {
     "title": "Profile",
-    "body": "This protected page is awaiting an authentication provider."
+    "body": "This protected page is awaiting an authentication provider.",
+    "signedInAs": "Signed in as {email}"
   },
   "audit": {
     "title": "Changes in the Last 24 Hours",
     "body": "This is a preview of the audit-log contract. Undo is not implemented until a secure backend exists.",
-    "placeholder": "Demonstration data only — not an operational audit log."
+    "placeholder": "Demonstration data only — not an operational audit log.",
+    "noTenantContext": "No authorized tenant context is available.",
+    "databaseUnavailable": "Audit data is temporarily unavailable."
   },
   "system": {
     "unauthorized": "Unauthorized",

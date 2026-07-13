@@ -8,4 +8,4 @@
 2. شغّل `npm install` من جذر المستودع.
 3. شغّل `npm run dev` ثم افتح `/ar` أو `/en`.
 
-الفحوصات: `npm run lint` و`npm run typecheck` و`npm run test` و`npm run build` أو `npm run check` للجميع. استخدم `npm ci` في CI أو بعد وجود lockfile. لا يوجد مزود مصادقة أو قاعدة بيانات إنتاج في هذه المرحلة؛ لا تعد صفحات التطوير المحمية Placeholder مصادقة، والإنتاج يفشل مغلقًا إلى واجهة تسجيل الدخول.
+الفحوصات: `npm run lint` و`npm run typecheck` و`npm run test` و`npm run build` أو `npm run check` للجميع. استخدم `npm ci` في CI أو بعد وجود lockfile. لتشغيل Supabase محليًا عند توفر CLI وDocker استخدم `supabase start` ثم `supabase db reset` لتطبيق migrations وseed الخيالي. لإعادة تعيين بيئة محلية: أوقف الخدمات ثم أعد `supabase db reset`؛ لا تستعمل هذا الأمر على إنتاج. اختبر رفض cross-tenant عبر `supabase/tests/rls_cross_tenant.sql`.
