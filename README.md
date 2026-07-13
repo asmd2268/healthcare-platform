@@ -37,3 +37,5 @@ The first business-module foundation provides configurable bilingual templates, 
 Administration screens use demonstration repository data and local-only draft interactions. Backend persistence, real authorization, imports, exports, and deletion execution remain placeholders. See [Platform Administration UI](docs/PLATFORM_ADMINISTRATION_UI.md).
 
 Staging SQL validation: `SUPABASE_ENV=staging DATABASE_URL=<secret> npm run test:sql:staging`. It never resets a remote database and refuses production-looking targets.
+
+These are fictional-data security smoke tests, not complete RLS certification. Every executable SQL file must contain its own real `BEGIN` and `ROLLBACK`; the runner only preflights that convention and is not a full SQL parser.

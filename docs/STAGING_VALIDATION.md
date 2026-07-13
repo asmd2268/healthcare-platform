@@ -116,3 +116,5 @@ done
 ## اختبارات SQL التنفيذية
 
 شغّل `SUPABASE_ENV=staging DATABASE_URL=<secret> npm run test:sql:staging`. لا يعيد runner ضبط قاعدة البيانات، ويرفض هدفًا يبدو إنتاجيًا، ويشغّل فقط ملفات `*.executable.sql` بالترتيب ثم يتراجع عن كل transaction. لا يطبع عنوان قاعدة البيانات أو كلمة المرور. `000_staging_security.executable.sql` قابل للتنفيذ؛ بقية ملفات `supabase/tests` الحالية جزئية أو تعليقات/قوالب pgTAP وليست دليل نجاح حتى تتحول إلى assertions تنفيذية.
+
+لا يضمن runner التراجع عن SQL عشوائي؛ كل ملف executable يجب أن يضم `BEGIN` و`ROLLBACK` حقيقيين. يفحص runner هذه convention فقط وليس SQL parser كاملًا، ولا يعيد ضبط قاعدة Staging المخصصة. تستخدم الاختبارات بيانات خيالية فقط، وهي smoke tests أمنية وليست شهادة تغطية RLS كاملة.

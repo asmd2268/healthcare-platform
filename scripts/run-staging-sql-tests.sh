@@ -8,5 +8,5 @@ files=()
 while IFS= read -r file; do files+=("$file"); done < <(find supabase/tests -maxdepth 1 -name '*.executable.sql' -print | LC_ALL=C sort)
 (( ${#files[@]} > 0 )) || { echo "FAIL: 0 executable SQL tests discovered" >&2; exit 1; }
 echo "Discovered ${#files[@]} executable SQL test(s)"
-for file in "${files[@]}"; do node -e "import('./scripts/staging-sql-test-validation.mjs').then(m=>m.validateSqlTest(require('fs').readFileSync(process.argv[1],'utf8'),process.argv[1]))" "$file"; echo "RUN: $file"; psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$file" >/dev/null; done
+for file in "${files[@]}"; do node scripts/staging-sql-test-validation.mjs "$file"; echo "RUN: $file"; psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$file" >/dev/null; done
 echo "PASS: ${#files[@]} executable staging SQL test(s)"
