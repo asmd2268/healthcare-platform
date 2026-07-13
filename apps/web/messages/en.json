@@ -283,5 +283,8 @@
   },
   "reporting": {
     "reports":"Reports", "dashboard":"Dashboards", "saved":"Saved Reports", "widgets":"Widget Library", "templates":"Report Templates", "placeholder":"Demonstration definitions only. Query execution, scheduling, and persistence require an authorized server implementation.", "demoData":"Clearly labelled demonstration data — not operational data.", "search":"Search reports", "module":"Module", "all":"All modules", "medicationErrors":"Medication Errors", "inspections":"Department Inspections", "owner":"Owner", "published":"Published", "chartPlaceholder":"Demonstration chart", "medicationDashboard":"Medication Error Dashboard", "inspectionDashboard":"Inspection Dashboard"
+  },
+  "policies": {
+    "nav":"Policies & Procedures", "library":"Policy Library", "dashboard":"Policy Dashboard", "demoNotice":"Demonstration data only. Secure persistence, document upload, and workflow execution require authorized server services.", "search":"Search title or policy number", "status":"Status", "all":"All statuses", "draft":"Draft", "under_review":"Under review", "approved":"Approved", "published":"Published", "superseded":"Superseded", "archived":"Archived", "owner":"Owner", "version":"Version", "preview":"Preview", "createVersion":"Create draft version", "archive":"Archive", "versionCreated":"A local demonstration draft version was created.", "demoChangeSummary":"Demonstration revision", "untitled":"Untitled policy", "drafts":"Draft policies", "upcomingReviews":"Upcoming reviews", "readCompletion":"Read completion"
   }
 }

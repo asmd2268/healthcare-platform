@@ -1,0 +1,63 @@
+# السياسات والإجراءات (Policies & Procedures)
+
+## الهدف والنطاق
+
+توفر الوحدة مكتبة مركزية ثنائية اللغة للسياسات والإجراءات، مبنية فوق المصادقة، الأدوار والصلاحيات، Platform Administration، Workflow Engine، Reporting Engine، وعزل المستأجرين القائم. لا تنشئ هذه الوحدة محرك سير عمل أو تدقيق أو تقارير موازياً.
+
+تدعم كل سياسة معرفًا داخليًا ثابتًا ورقم سياسة فريدًا ضمن نطاقها، عنوانًا ووصفًا بالعربية والإنجليزية عند الحاجة، التصنيف المرجعي القابل للإدارة، القسم والمنشأة والمؤسسة والمالك والمُعتمد، الكلمات المفتاحية والوسوم، العلاقات مع السياسات والنماذج وCAPA وأخطاء الدواء والاستدعاءات. الحالات هي: `draft` و`under_review` و`approved` و`published` و`superseded` و`archived`.
+
+## البيانات والحدود الأمنية
+
+تضيف migration `202607130016_policies_and_procedures_foundation.sql` الجداول `policy_definitions` و`policy_versions` و`policy_documents` و`policy_links` و`policy_acknowledgements` و`policy_events`. كل جدول يحمل `tenant_id` و`organization_id` و`facility_id` حيث يلزم. تتحقق triggers من أن النسخ والمرفقات والروابط والإقرارات تتبع نطاق الأب نفسه. لا تُخزن بيانات ثنائية (BLOB) في PostgreSQL.
+
+تطبق RLS عزل tenant ثم organization ثم facility، وتتحقق `can_policy` من وجود مستخدم مصادق عليه، نطاقه، وصلاحية صريحة. النسخة المنشورة تقرأ فقط بصلاحية `policies.view` ضمن النطاق؛ المسودات والمراجعات لا تظهر إلا للمحرر أو المراجع المخول. المرفق يرث نطاق السياسة، ولا يمكن للعميل إدراج أحداث `policy_events` مباشرة.
+
+تضيف migration `202607130017_secure_policy_lifecycle_documents_storage.sql` طبقة lifecycle: لا توجد سياسات RLS عامة للكتابة على definitions أو versions أو documents أو links. دوال `SECURITY DEFINER` فقط تنشئ السياسة، تعدل المسودة، ترسل للمراجعة، تعتمد أو ترفض، تنشر، تؤرشف، تستعيد، وتنشئ draft version. تتحقق كل دالة من الصلاحية والنطاق وتكتب event/audit موثوقًا داخل المعاملة؛ لا يستطيع عميل مصادق تغيير status أو `current_version_id` أو طوابع approval/publication/archive مباشرة.
+
+الصلاحيات هي: `policies.view`، `create`، `edit`، `review`، `approve`، `publish`، `archive`، `restore`، `acknowledge`، `export`، و`manage_configuration`. يمنح Platform Owner هذه الصلاحيات افتراضيًا فقط؛ تمنح الأدوار التشغيلية ما يلزم صراحة من Platform Administration.
+
+## الإصدارات وسير العمل
+
+النسخة المنشورة غير قابلة للتعديل على مستوى قاعدة البيانات. ينشئ `create_policy_draft_version` نسخة مسودة عميقة من النسخة المنشورة ويتطلب ملخص تغيير غير فارغ. يحتفظ الإصدار بالرقم الرئيسي/الفرعي، ملخص التغيير، المؤلف والتاريخ، وسجل الاعتماد والنشر. تنشر `publish_policy_version` نسخة معتمدة فقط ثم تحدث `current_version_id` بصورة ذرية؛ لا يمكن أن تشير سياسة منشورة إلى نسخة مسودة أو مؤرشفة.
+
+تستعمل الواجهة Workflow Engine الحالي لانتقالات Draft → Submit/Review → Approve → Publish → Archive؛ لا تمثل الواجهة التجريبية تنفيذًا خادميًا نهائيًا لسير العمل. يتصل module adapter بسجل `workflow_instances` عند تهيئة تعريف سير العمل الخاص بالسياسات. المقارنة الوصفية بين النسخ متاحة عبر metadata؛ مقارنة DOCX/PDF الفعلية عمل مستقبلي.
+
+يقفل النشر التعريف والنسخة، ويطلب `approved` و`policies.publish` والنطاق المطابق، ويحوّل النسخة المنشورة السابقة إلى `superseded` ثم ينشر الهدف ويحدث `current_version_id` بصورة ذرية. يمنع partial unique index وجود أكثر من نسخة منشورة، ولا يسمح trigger بتعديل نسخة منشورة إلا لهذا الانتقال الداخلي المقيد.
+
+## المستندات والتخزين
+
+يسمح العقد بمرفقات PDF وDOCX وDOC وXLSX وXLS وPPTX والصور، مع `checksum` وMIME type والحجم والرافع والتاريخ ووسم الإصدار واللغة وتوفر المعاينة. يحتفظ `policy_documents` فقط باسم bucket ومسار Storage؛ التنزيل والمعاينة ينفذان بخدمة خادمية تتحقق من الصلاحية قبل إصدار URL موقّع. لا يكفي معرفة storage key للوصول.
+
+في مرحلة Word Import يُرفع DOCX الأصلي، ثم يمر إلى adapter خادمي لاستخراج plain text وفهرس headings حيث يمكن. يحفظ المصدر والنص المستخرج، ولا توجد أي AI conversion أو ترجمة أو OCR في هذه المرحلة. PDF يحتفظ بالملف وmetadata والمعاينة/التنزيل عند تهيئة Storage؛ OCR مستقبلي.
+
+تفاصيل bucket الخاص ومسار المفتاح وsigned URL وعقد الرفع موثقة في [STORAGE_SECURITY.md](STORAGE_SECURITY.md). المطبق الآن هو قيد قاعدة البيانات وStorage RLS؛ خدمة signed upload وDOCX extraction وPDF rendering وmalware scanning مؤجلة بوضوح.
+
+## البحث والإدارة والتقارير
+
+عقد `PolicySearch` يدعم العنوان، الرقم، الكلمات المفتاحية، التصنيف، القسم، المالك، الحالة، تواريخ السريان والمراجعة، والإصدار مع pagination محدد. الحقول المستهدفة للبحث النصي المستقبلي هي `title_ar` و`title_en` و`policy_number` و`keywords` و`extracted_text`، مع فهارس عربية وإنجليزية ومرادفات مستقبلًا. لا يطبق هذا الأساس فهرس Full Text Search بعد.
+
+التصنيفات وأنواع الوثائق وفواصل المراجعة وقواعد الإقرار وقوالب الترقيم والاحتفاظ تدار كـreference data/settings عبر Platform Administration؛ لا تضع الوحدة قائمة تصنيفات تشغيلية ثابتة. توفر Reporting Engine تعريف Dashboard ابتدائيًا: المنشور، المسودات، المراجعات المتأخرة والقادمة، نسبة الإقرار، والتوزيع حسب التصنيف والقسم والمنشأة. تعريفات الاستعلامات والرسوم التشغيلية خاضعة لتكوين Reporting Engine في خطوة لاحقة.
+
+## الإقرار والإشعارات والتدقيق
+
+`acknowledge_policy_version` يسجل المستخدم والوقت فقط للنسخة المنشورة ضمن النطاق. يمكن للعقد الاحتفاظ بالقسم والمنشأة وتاريخ الاستحقاق وحالة التذكير، ليحسب المدير نسبة الإكمال. عقود الإشعار الموجودة تستقبل `review_due` و`approval_requested` و`published` و`updated` و`acknowledgement_overdue`; الإرسال الخارجي ليس جزءًا من هذه migration.
+
+يقرأ المستخدم إقراره فقط. تتطلب قراءة إقرارات الموظفين داخل النطاق `policies.view_acknowledgements`، وتحتاج إدارة الحملات والتذكيرات `policies.manage_acknowledgements`. لا تكفي `policies.view` لقراءة إقرارات الآخرين.
+
+## ضوابط الأرشفة والاعتماد والرفع
+
+لا يرى حامل `policies.view` إلا definition منشورًا ونسخته المنشورة النشطة. لا يظهر التعريف المؤرشف أو النسخة المستبدلة/التاريخية إلا مع `policies.view_history` داخل النطاق. تنطبق القاعدة نفسها على metadata والتنزيل وStorage SELECT، بينما تظهر المسودة للمحرر فقط، وتظهر `under_review` للمراجع أو المعتمد، وتظهر `approved` للمعتمد أو الناشر.
+
+الإرسال يتطلب `policies.edit` و`policies.submit`، فلا تمنح مراجعة السياسات حق الإرسال وحدها. الاعتماد يتطلب `policies.approve`، ويفحص المعتمد المعيّن إن وجد؛ لا يستطيع المالك أو منشئ النسخة اعتمادها. تجاوز التعيين يحتاج `policies.override_approval_assignment` ولا يمنح افتراضيًا إلا لـPlatform Owner.
+
+لا تنفذ الواجهة finalization للمستند. تنشئ `authorize_policy_upload` authorization مؤقتًا لمسودة، ثم تنفذ خدمة server-only `finalize_policy_document_verified` فحص وجود object في bucket `policy-documents`، المسار، الحجم، عدم التكرار، وحالة فحص malware قبل metadata. لا يتحقق SQL من checksum فعليًا؛ يتحقق worker خادمي موثوق منه قبل finalization. حذف ملف المسودة يتم بخدمة server-only موثقة فقط؛ الملفات المنشورة أو المعتمدة أو المستبدلة أو المؤرشفة لا تحذف. ينظف orphan uploads غير النهائية بعد 15 دقيقة أو فترة تشغيلية محافظة، مع مراجعة قبل الحذف.
+
+تسجل عمليات worker هوية الإنسان الفعلية لا service role: upload يستعمل `policy_upload_authorizations.uploader_id`، والحذف يستعمل actor مُتحققًا من عضويته وصلاحية `policies.edit`. كاتب داخلي غير قابل للتنفيذ من العميل يكتب `policy_events.actor_id` و`audit_events.actor_id` في المعاملة ذاتها؛ فشل التدقيق يلغي finalization أو الحذف. لا تثق الدوال بمعرف actor يرسله المتصفح.
+
+تمنع authorization غير المدعومة قبل الرفع، وتستخدم deletion request من مرحلتين للمستندات draft. يحذف worker Storage أولًا، ولا تحذف metadata إلا عند completion يؤكد غياب object. لا يمكن للدالة القديمة ذات اسم الحذف حذف metadata وحدها. الملفات approved/published/superseded/archived محمية من المسار كله.
+
+يسجل `policy_events` أحداث إنشاء الإصدار، النشر، والإقرار كمسار domain audit موثوق ومقيد، بينما يكون تكامل Audit Engine المركزي عبر خدمة خادمية موثوقة. يجب أن تسجل الخدمات النهائية أيضًا upload/download/archive/restore/metadata edit/approval في مسار التدقيق المعتمد، من دون كشف مفاتيح service-role أو السماح بالكتابة المباشرة من العميل.
+
+## الحالة الحالية والاختبارات
+
+الواجهة الحالية مكتبة ولوحة demonstration ثنائية اللغة بوضوح، لا تمثل تخزينًا أو رفعًا أو تحليل DOCX أو صلاحيات backend مكتملة. تختبر وحدات TypeScript نسخ النسخة المنشورة، انتقالات الحالة، عقد البحث، وتتحقق من وجود قيود RLS والimmutability في migration. يلزم تشغيل SQL scenarios على staging منفصل قبل اعتبار سياسات أو Storage أو workflow production-ready.
