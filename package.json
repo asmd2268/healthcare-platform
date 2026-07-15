@@ -2,7 +2,10 @@
   "name": "healthcare-platform",
   "private": true,
   "packageManager": "npm@11.0.0",
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "npm run dev --workspace=@healthcare/web",
     "build": "npm run build --workspace=@healthcare/web",
@@ -16,6 +19,10 @@
     "supabase:target:bootstrap-check": "node scripts/supabase-target-safety.mjs bootstrap",
     "supabase:target:seed-check": "node scripts/supabase-target-safety.mjs seed",
     "supabase:target:sql-tests-check": "node scripts/supabase-target-safety.mjs sql-tests",
-    "test:sql:staging": "bash scripts/run-staging-sql-tests.sh"
+    "test:sql:staging": "bash scripts/run-staging-sql-tests.sh",
+    "test:sql:local": "bash scripts/run-local-sql-tests.sh"
+  },
+  "devDependencies": {
+    "supabase": "^2.109.1"
   }
 }
