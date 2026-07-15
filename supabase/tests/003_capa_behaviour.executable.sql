@@ -60,7 +60,15 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-00000000a313',true);
 select public.transition_capa(:'capa_main','approved',null);
 select public.create_capa_action(:'capa_main','إجراء','Action','00000000-0000-0000-0000-00000000a314',current_date+7,true) as action_main \gset
-select public.reassign_capa_action(:'action_main','00000000-0000-0000-0000-00000000a314','00000000-0000-0000-0000-00000000a315','verification required');
+select public.capa_test_expect_failure(format('select public.reassign_capa_action(%L::uuid,''00000000-0000-0000-0000-00000000a314''::uuid,''00000000-0000-0000-0000-00000000a315''::uuid,'''')',:'action_main'),'CAPA action reassignment denied');
+select public.reassign_capa_action(:'action_main','00000000-0000-0000-0000-00000000a314','00000000-0000-0000-0000-00000000a315','verifier changed');
+select public.capa_test_expect_failure(format('select public.reassign_capa_action(%L::uuid,''00000000-0000-0000-0000-00000000a314''::uuid,''00000000-0000-0000-0000-00000000a314''::uuid,''invalid self verifier'')',:'action_main'),'CAPA action reassignment denied');
+select public.capa_test_expect_failure(format('select public.reassign_capa_action(%L::uuid,''00000000-0000-0000-0000-00000000a314''::uuid,''00000000-0000-0000-0000-00000000a319''::uuid,''inactive verifier'')',:'action_main'),'CAPA action reassignment denied');
+reset role;
+select public.capa_test_assert(exists(select 1 from public.capa_events where capa_id=:'capa_main' and action='capa.action_reassigned' and metadata->>'reason'='verifier changed'),'verifier reassignment event is recorded');
+select public.capa_test_assert(exists(select 1 from public.audit_events where entity_id=:'capa_main' and action='capa.action_reassigned'),'verifier reassignment audit is recorded');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-00000000a313',true);
 select public.transition_capa(:'capa_main','in_progress',null);
 
 -- Closure gates are exercised against the same record, before prerequisites are supplied.
