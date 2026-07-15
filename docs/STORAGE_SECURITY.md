@@ -1,5 +1,7 @@
 # أمن تخزين المستندات (Storage Security)
 
+CAPA evidence uses the same future shared trusted-document service contract: private bucket, authorization-bound path, checksum verification, malware scan, short-lived signed access, trusted actor audit, and two-phase deletion. The CAPA migration stores evidence metadata only; it does not introduce a second browser-accessible Storage implementation.
+
 ## مستندات السياسات
 
 ينشئ أساس Policies & Procedures bucket خاصًا باسم `policy-documents`. لا يكون Public، ولا توجد سياسة قراءة أو كتابة عامة. يحتفظ PostgreSQL بالـmetadata فقط، وليس binary data.

@@ -7,6 +7,8 @@
 
 This document is the permanent source of truth for the entire project.
 
+CAPA is a shared corrective-and-preventive-action capability. It must remain module-neutral, tenant-scoped, bilingual, auditable, and reusable by safety, inspection, policy, stock, controlled-drug, transfer, custody, and future modules through allowlisted adapters.
+
 Codex and any future developer must read this file before making any change.
 
 The platform is a commercial, modular, bilingual healthcare operations platform designed for:

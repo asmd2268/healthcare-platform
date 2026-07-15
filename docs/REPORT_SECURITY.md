@@ -5,3 +5,6 @@
 لا تحفظ exports في الواجهة ولا تصدر حقولًا سرية دون adapter خادمي يطبق data minimization وسجل تدقيق. الجداول كبيرة الحجم تستخدم pagination حدّها 200 سجل، ويفرض التنفيذ المستقبلي filtering قبل aggregation، فهارس زمن/نطاق، read models أو materialized views، cache per-scope قصير العمر، وحدود rate/query.
 
 `reports.export_confidential` يمنح افتراضيًا لمالك المنصة فقط؛ يجوز للمنظمة منحه صراحةً لأدوار معتمدة بعد مراجعة مناسبة. Saved Reports في هذا الإصدار create-and-read فقط وخصوصية للمالك. لا يُعدل Dashboard منشور أو يحذف؛ يتطلب التغيير نسخة Draft بديلة.
+# CAPA integration
+
+CAPA dashboard and report definitions must execute through the shared Reporting Engine, not client aggregation. Every CAPA metric inherits tenant/organization/facility RLS, confidentiality permission, pagination, and export controls. Current CAPA dashboard UI is explicitly demonstration-only.
