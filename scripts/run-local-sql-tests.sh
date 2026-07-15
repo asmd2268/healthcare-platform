@@ -36,13 +36,13 @@ for file in "${files[@]}"; do
   echo "RUN: $file"
   psql "$local_db_url" -v ON_ERROR_STOP=1 -f "$file"
 done
-concurrency_test="supabase/tests/004_capa_numbering_concurrency.sh"
-if [[ -x "$concurrency_test" ]]; then
+concurrency_tests=()
+while IFS= read -r file; do concurrency_tests+=("$file"); done < <(find supabase/tests -maxdepth 1 -name '*_concurrency.sh' -print | LC_ALL=C sort)
+(( ${#concurrency_tests[@]} > 0 )) || { echo "FAIL: 0 concurrency SQL tests discovered" >&2; exit 1; }
+for concurrency_test in "${concurrency_tests[@]}"; do
+  [[ -x "$concurrency_test" ]] || { echo "FAIL: concurrency test is not executable: $concurrency_test" >&2; exit 1; }
   echo "RUN: $concurrency_test"
   "$concurrency_test" "$local_db_url"
-else
-  echo "FAIL: expected executable concurrency test $concurrency_test" >&2
-  exit 1
-fi
+done
 echo "PASS: ${#files[@]} executable local SQL test(s); each test rolls back its own transaction"
 echo "INFO: Supabase local services remain running; use 'supabase stop' when finished."
