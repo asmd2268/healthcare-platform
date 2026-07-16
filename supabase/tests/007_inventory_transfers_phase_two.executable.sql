@@ -787,17 +787,90 @@ select public.transfer_test_expect_failure($$update public.inventory_reservation
 select public.transfer_test_expect_failure($$delete from public.inventory_reservations$$,'Posted inventory reservation records are append-only');
 select public.transfer_test_assert(has_table_privilege('authenticated','public.inventory_reservation_adjustments','SELECT') and not has_table_privilege('authenticated','public.inventory_reservation_adjustments','INSERT, UPDATE, DELETE') and not has_function_privilege('authenticated','public.append_inventory_reservation_adjustment(uuid,uuid,uuid,uuid,public.inventory_reservation_adjustment_type,numeric,uuid,uuid,text,jsonb)'::regprocedure,'EXECUTE') and exists(select 1 from pg_trigger t where t.tgrelid='public.inventory_reservation_adjustments'::regclass and t.tgenabled<>'D' and t.tgname='inventory_reservation_adjustments_immutable') and exists(select 1 from pg_trigger t where t.tgrelid='public.inventory_reservations'::regclass and t.tgenabled<>'D' and t.tgname='inventory_reservations_immutable'),'reservation adjustment and reservation tables are append-only and client-write denied');
 
--- Expiry is explicitly disabled until its trusted automation identity and
--- adjustment-backed command model exist.  A due reservation must be inert.
-insert into public.inventory_transfers(id,tenant_id,organization_id,facility_id,source_location_id,destination_root_location_id,transit_location_id,created_by,updated_by)
-select '71000000-0000-0000-0000-000000000101',tenant_id,organization_id,facility_id,source_location_id,destination_root_location_id,transit_location_id,'71000000-0000-0000-0000-000000000005','71000000-0000-0000-0000-000000000005' from public.inventory_transfers where id=:'transfer_id'::uuid;
-insert into public.inventory_transfer_lines(id,transfer_id,inventory_item_profile_id,requested_quantity_base,created_by) values('71000000-0000-0000-0000-000000000102','71000000-0000-0000-0000-000000000101','71000000-0000-0000-0000-000000000007',1,'71000000-0000-0000-0000-000000000005');
-insert into public.inventory_transfer_allocations(id,transfer_line_id,source_location_id,batch_id,recording_channel,planned_quantity_base,created_by) values('71000000-0000-0000-0000-000000000103','71000000-0000-0000-0000-000000000102','71000000-0000-0000-0000-000000000009','71000000-0000-0000-0000-000000000077','system',1,'71000000-0000-0000-0000-000000000005');
-insert into public.inventory_reservations(id,transfer_allocation_id,quantity_base,created_at,expires_at,created_by) values('71000000-0000-0000-0000-000000000104','71000000-0000-0000-0000-000000000103',1,now()-interval '2 hours',now()-interval '1 hour','71000000-0000-0000-0000-000000000005');
-select expires_at as expires_at,(select count(*) from public.inventory_reservation_events where reservation_id='71000000-0000-0000-0000-000000000104') as legacy_events,(select count(*) from public.inventory_reservation_adjustments where reservation_id='71000000-0000-0000-0000-000000000104') as adjustments,(select count(*) from public.inventory_commands where idempotency_key='expiry-deferred-probe') as commands,(select count(*) from public.inventory_transfer_events where transfer_id='71000000-0000-0000-0000-000000000101') as transfer_events,(select count(*) from public.audit_events where entity_type='inventory_transfer' and entity_id='71000000-0000-0000-0000-000000000101') as audit,(select count(*) from public.inventory_ledger_entries where batch_id='71000000-0000-0000-0000-000000000077') as ledger,(select count(*) from public.inventory_balance_projections where batch_id='71000000-0000-0000-0000-000000000077') as projections from public.inventory_reservations where id='71000000-0000-0000-0000-000000000104' \gset expiry_deferred_before_
+-- Expiry is a trusted, adjustment-backed ATP release. It must preserve the
+-- immutable reservation, avoid legacy and physical accounting writes, attribute
+-- command/event/audit records to the supplied authorized actor, and replay once.
+insert into public.inventory_transfers(id,tenant_id,organization_id,facility_id,source_location_id,destination_root_location_id,transit_location_id,status,created_by,updated_by)
+select '71000000-0000-0000-0000-000000000101',tenant_id,organization_id,facility_id,source_location_id,destination_root_location_id,transit_location_id,'reserved','71000000-0000-0000-0000-000000000005','71000000-0000-0000-0000-000000000005'
+from public.inventory_transfers where id=:'transfer_id'::uuid;
+insert into public.inventory_transfer_lines(id,transfer_id,inventory_item_profile_id,requested_quantity_base,created_by)
+values('71000000-0000-0000-0000-000000000102','71000000-0000-0000-0000-000000000101','71000000-0000-0000-0000-000000000007',1,'71000000-0000-0000-0000-000000000005');
+insert into public.inventory_transfer_allocations(id,transfer_line_id,source_location_id,batch_id,recording_channel,planned_quantity_base,created_by)
+values('71000000-0000-0000-0000-000000000103','71000000-0000-0000-0000-000000000102','71000000-0000-0000-0000-000000000009','71000000-0000-0000-0000-000000000077','system',1,'71000000-0000-0000-0000-000000000005');
+insert into public.inventory_reservations(id,transfer_allocation_id,quantity_base,created_at,expires_at,created_by)
+values('71000000-0000-0000-0000-000000000104','71000000-0000-0000-0000-000000000103',1,now()-interval '2 hours',now()-interval '1 hour','71000000-0000-0000-0000-000000000005');
+
+select
+  expires_at as expires_at,
+  (select count(*) from public.inventory_reservation_events where reservation_id='71000000-0000-0000-0000-000000000104') as legacy_events,
+  (select count(*) from public.inventory_reservation_adjustments where reservation_id='71000000-0000-0000-0000-000000000104') as adjustments,
+  (select count(*) from public.inventory_commands where requester_id='71000000-0000-0000-0000-000000000005' and idempotency_key='reservation-expiry:71000000-0000-0000-0000-000000000104') as commands,
+  (select count(*) from public.inventory_transfer_events where transfer_id='71000000-0000-0000-0000-000000000101') as transfer_events,
+  (select count(*) from public.audit_events where entity_type='inventory_transfer' and entity_id='71000000-0000-0000-0000-000000000101') as audit,
+  (select count(*) from public.inventory_ledger_entries where batch_id='71000000-0000-0000-0000-000000000077') as ledger,
+  (select count(*) from public.inventory_balance_projections where batch_id='71000000-0000-0000-0000-000000000077') as projections
+from public.inventory_reservations
+where id='71000000-0000-0000-0000-000000000104'
+\gset expiry_before_
+
+set local role authenticated;
+select set_config('request.jwt.claim.role','authenticated',true),set_config('request.jwt.claim.sub','71000000-0000-0000-0000-000000000005',true);
+select public.transfer_test_expect_failure(
+  $$select public.expire_inventory_transfer_reservations('71000000-0000-0000-0000-000000000005',100)$$,
+  'permission denied'
+);
+reset role;
+
 select set_config('request.jwt.claim.role','service_role',true);
-select public.transfer_test_expect_failure($$select public.expire_inventory_transfer_reservations()$$,'Inventory reservation expiry adjustment automation is deferred');
-select public.transfer_test_assert((select expires_at from public.inventory_reservations where id='71000000-0000-0000-0000-000000000104')=:'expiry_deferred_before_expires_at'::timestamptz and (select count(*) from public.inventory_reservation_events where reservation_id='71000000-0000-0000-0000-000000000104')=:'expiry_deferred_before_legacy_events'::int and (select count(*) from public.inventory_reservation_adjustments where reservation_id='71000000-0000-0000-0000-000000000104')=:'expiry_deferred_before_adjustments'::int and (select count(*) from public.inventory_commands where idempotency_key='expiry-deferred-probe')=:'expiry_deferred_before_commands'::int and (select count(*) from public.inventory_transfer_events where transfer_id='71000000-0000-0000-0000-000000000101')=:'expiry_deferred_before_transfer_events'::int and (select count(*) from public.audit_events where entity_type='inventory_transfer' and entity_id='71000000-0000-0000-0000-000000000101')=:'expiry_deferred_before_audit'::int and (select count(*) from public.inventory_ledger_entries where batch_id='71000000-0000-0000-0000-000000000077')=:'expiry_deferred_before_ledger'::int and (select count(*) from public.inventory_balance_projections where batch_id='71000000-0000-0000-0000-000000000077')=:'expiry_deferred_before_projections'::int,'due reservation expiry fails closed without legacy event, adjustment, command, audit, ledger or projection effect');
+select public.transfer_test_expect_failure(
+  $$select public.expire_inventory_transfer_reservations('71000000-0000-0000-0000-000000000005',null)$$,
+  'Inventory reservation expiry invocation is invalid'
+);
+select public.transfer_test_expect_failure(
+  $$select public.expire_inventory_transfer_reservations('71000000-0000-0000-0000-000000000085',100)$$,
+  'Inventory reservation expiry actor is not authorized'
+);
+
+select public.expire_inventory_transfer_reservations(
+  '71000000-0000-0000-0000-000000000005',
+  100
+) as expiry_first_count
+\gset
+
+select public.transfer_test_assert(
+  :'expiry_first_count'::int=1,
+  'trusted expiry processes one due reservation'
+);
+
+select public.transfer_test_assert(
+  (select expires_at from public.inventory_reservations where id='71000000-0000-0000-0000-000000000104')=:'expiry_before_expires_at'::timestamptz
+  and (select status from public.inventory_transfers where id='71000000-0000-0000-0000-000000000101')='draft'
+  and (select public.inventory_transfer_reservation_remaining('71000000-0000-0000-0000-000000000104'))=0
+  and (select count(*) from public.inventory_reservation_events where reservation_id='71000000-0000-0000-0000-000000000104')=:'expiry_before_legacy_events'::int
+  and (select count(*) from public.inventory_reservation_adjustments where reservation_id='71000000-0000-0000-0000-000000000104' and adjustment_type='expiry_released' and quantity_base=1 and created_by='71000000-0000-0000-0000-000000000005')=1
+  and (select count(*) from public.inventory_commands where requester_id='71000000-0000-0000-0000-000000000005' and idempotency_key='reservation-expiry:71000000-0000-0000-0000-000000000104' and command_type='transfer_reservation_expire' and status='posted' and payload->>'result_reservation_id'='71000000-0000-0000-0000-000000000104')=1
+  and (select count(*) from public.inventory_transfer_events where transfer_id='71000000-0000-0000-0000-000000000101' and actor_id='71000000-0000-0000-0000-000000000005' and action='inventory.transfer_reservation_expired')=1
+  and (select count(*) from public.audit_events where entity_type='inventory_transfer' and entity_id='71000000-0000-0000-0000-000000000101' and actor_id='71000000-0000-0000-0000-000000000005' and action='inventory.transfer_reservation_expired')=1
+  and (select count(*) from public.inventory_ledger_entries where batch_id='71000000-0000-0000-0000-000000000077')=:'expiry_before_ledger'::int
+  and (select count(*) from public.inventory_balance_projections where batch_id='71000000-0000-0000-0000-000000000077')=:'expiry_before_projections'::int,
+  'expiry writes one actor-attributed adjustment, command, event and audit without legacy or physical accounting effects'
+);
+
+select public.expire_inventory_transfer_reservations(
+  '71000000-0000-0000-0000-000000000005',
+  100
+) as expiry_replay_count
+\gset
+
+select public.transfer_test_assert(
+  :'expiry_replay_count'::int=0
+  and (select count(*) from public.inventory_reservation_adjustments where reservation_id='71000000-0000-0000-0000-000000000104' and adjustment_type='expiry_released')=1
+  and (select count(*) from public.inventory_commands where requester_id='71000000-0000-0000-0000-000000000005' and idempotency_key='reservation-expiry:71000000-0000-0000-0000-000000000104')=1
+  and (select count(*) from public.inventory_transfer_events where transfer_id='71000000-0000-0000-0000-000000000101' and action='inventory.transfer_reservation_expired')=1
+  and (select count(*) from public.audit_events where entity_type='inventory_transfer' and entity_id='71000000-0000-0000-0000-000000000101' and action='inventory.transfer_reservation_expired')=1,
+  'expiry replay has no duplicate command, adjustment, event or audit effect'
+);
+reset role;
 
 -- The aggregate reservation check is intentionally before transaction posting.
 -- One allocation has remaining six: duplicated 4+4 fails, while 3+3 posts
