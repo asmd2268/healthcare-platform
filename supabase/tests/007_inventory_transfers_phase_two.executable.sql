@@ -3,6 +3,7 @@ begin;
 
 create function public.transfer_test_assert(p_condition boolean,p_message text) returns void language plpgsql as $$ begin if not p_condition then raise exception 'ASSERT: %',p_message; end if; end $$;
 create function public.transfer_test_expect_failure(p_sql text,p_fragment text) returns void language plpgsql as $$ begin begin execute p_sql; exception when others then if position(p_fragment in sqlerrm)=0 then raise; end if; return; end; raise exception 'ASSERT: expected failure (%)',p_fragment; end $$;
+create function public.transfer_test_expect_sqlstate(p_sql text,p_sqlstate text,p_fragment text) returns void language plpgsql as $$ begin begin execute p_sql; exception when others then if sqlstate<>p_sqlstate or position(p_fragment in sqlerrm)=0 then raise; end if; return; end; raise exception 'ASSERT: expected SQLSTATE % (%)',p_sqlstate,p_fragment; end $$;
 create function public.transfer_test_physical_grain_mismatches(p_profile uuid,p_unit uuid,p_grains jsonb) returns integer language sql stable as $$
  with grains as (
    select (value->>'location_id')::uuid as location_id,(value->>'batch_id')::uuid as batch_id,
@@ -24,7 +25,7 @@ create function public.transfer_test_physical_grain_mismatches(p_profile uuid,p_
  left join projection p using(location_id,inventory_item_profile_id,batch_id,recording_channel,disposition)
  where coalesce(l.quantity_base,0) is distinct from coalesce(p.quantity_base,0);
 $$;
-grant execute on function public.transfer_test_assert(boolean,text),public.transfer_test_expect_failure(text,text),public.transfer_test_physical_grain_mismatches(uuid,uuid,jsonb) to authenticated;
+grant execute on function public.transfer_test_assert(boolean,text),public.transfer_test_expect_failure(text,text),public.transfer_test_expect_sqlstate(text,text,text),public.transfer_test_physical_grain_mismatches(uuid,uuid,jsonb) to authenticated;
 
 do $$
 declare t uuid:='71000000-0000-0000-0000-000000000001'; o uuid:='71000000-0000-0000-0000-000000000002'; f uuid:='71000000-0000-0000-0000-000000000003'; d uuid:='71000000-0000-0000-0000-000000000004'; u uuid:='71000000-0000-0000-0000-000000000005'; approver uuid:='71000000-0000-0000-0000-000000000026'; narrow uuid:='71000000-0000-0000-0000-000000000085'; role_id uuid:=gen_random_uuid(); approver_role uuid:=gen_random_uuid(); narrow_role uuid:='71000000-0000-0000-0000-000000000086'; ci uuid:='71000000-0000-0000-0000-000000000006'; ip uuid:='71000000-0000-0000-0000-000000000007'; iu uuid:='71000000-0000-0000-0000-000000000008'; src uuid:='71000000-0000-0000-0000-000000000009'; dst uuid:='71000000-0000-0000-0000-000000000010'; child uuid:='71000000-0000-0000-0000-000000000011'; b uuid:='71000000-0000-0000-0000-000000000012';
@@ -939,5 +940,113 @@ begin
 end $$;
 select public.transfer_test_assert(exists(select 1 from pg_index i join pg_class c on c.oid=i.indexrelid where c.relname='inventory_transfer_operations_non_issue_command_grain_uidx' and i.indisunique and i.indisvalid and i.indisready and pg_get_expr(i.indpred,i.indrelid) like '%operation_type <>%issue%'),'non-issue command grain index is unique, valid, ready and excludes only issue');
 rollback to savepoint inventory_transfer_operation_grain_probes;
+
+-- Deterministic physical-grain locks are private infrastructure.  Client
+-- roles must neither inspect the registry nor execute its helpers directly.
+select public.transfer_test_assert(
+  not has_table_privilege('authenticated','public.inventory_physical_grain_locks','select')
+  and not has_table_privilege('authenticated','public.inventory_physical_grain_locks','insert')
+  and not has_table_privilege('authenticated','public.inventory_physical_grain_locks','update')
+  and not has_table_privilege('authenticated','public.inventory_physical_grain_locks','delete')
+  and not has_function_privilege('authenticated','public.inventory_physical_grain_key(uuid,uuid,uuid,uuid,uuid,uuid,public.inventory_recording_channel,public.inventory_stock_disposition)'::regprocedure,'execute')
+  and not has_function_privilege('authenticated','public.inventory_lock_physical_grain_keys(text[])'::regprocedure,'execute')
+  and not has_function_privilege('authenticated','public.inventory_lock_physical_grains(jsonb)'::regprocedure,'execute')
+  and not has_function_privilege('authenticated','public.inventory_lock_transfer_execution_graph(uuid,uuid[])'::regprocedure,'execute'),
+  'physical grain lock registry and helpers are private to controlled functions'
+);
+
+-- Private-access denial is behavioural as well as catalog-based.
+set local role authenticated;
+select set_config('request.jwt.claim.role','authenticated',true),set_config('request.jwt.claim.sub','71000000-0000-0000-0000-000000000005',true);
+select public.transfer_test_expect_failure($$select * from public.inventory_physical_grain_locks$$,'permission denied');
+select public.transfer_test_expect_failure($$select public.inventory_physical_grain_key('71000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000002','71000000-0000-0000-0000-000000000003','71000000-0000-0000-0000-000000000009','71000000-0000-0000-0000-000000000007',null,'system','available')$$,'permission denied');
+select public.transfer_test_expect_failure($$select public.inventory_lock_physical_grain_keys(array['test'])$$,'permission denied');
+select public.transfer_test_expect_failure($$select public.inventory_lock_physical_grains('[]'::jsonb)$$,'permission denied');
+select public.transfer_test_expect_failure($$select public.inventory_lock_transfer_execution_graph('71000000-0000-0000-0000-000000000021',array['71000000-0000-0000-0000-000000000023']::uuid[])$$,'permission denied');
+reset role;
+
+-- Required grain dimensions fail closed before a registry row can be written.
+do $$
+declare
+  base_grain jsonb:=jsonb_build_object(
+    'tenant_id','71000000-0000-0000-0000-000000000001',
+    'organization_id','71000000-0000-0000-0000-000000000002',
+    'facility_id','71000000-0000-0000-0000-000000000003',
+    'location_id','71000000-0000-0000-0000-000000000009',
+    'inventory_item_profile_id','71000000-0000-0000-0000-000000000007',
+    'batch_id',null,
+    'recording_channel','system',
+    'disposition','available'
+  );
+  required_keys text[]:=array[
+    'tenant_id','organization_id','facility_id','location_id',
+    'inventory_item_profile_id','recording_channel','disposition'
+  ];
+  required_key text;
+  candidate jsonb;
+  before_count integer;
+  after_count integer;
+begin
+  select count(*) into before_count from public.inventory_physical_grain_locks;
+
+  foreach candidate in array array['{}'::jsonb,'[null]'::jsonb]
+  loop
+    begin
+      perform public.inventory_lock_physical_grains(candidate);
+      raise exception 'invalid physical grain unexpectedly locked';
+    exception when sqlstate '22023' then null;
+    end;
+  end loop;
+
+  foreach required_key in array required_keys
+  loop
+    foreach candidate in array array[
+      jsonb_build_array(base_grain-required_key),
+      jsonb_build_array(jsonb_set(base_grain,array[required_key],'null'::jsonb))
+    ]
+    loop
+      begin
+        perform public.inventory_lock_physical_grains(candidate);
+        raise exception 'incomplete physical grain unexpectedly locked for %',required_key;
+      exception when sqlstate '22023' then null;
+      end;
+    end loop;
+  end loop;
+
+  select count(*) into after_count from public.inventory_physical_grain_locks;
+  if after_count<>before_count then
+    raise exception 'ASSERT: invalid physical grain wrote a registry row';
+  end if;
+end $$;
+
+select count(*) as lock_registry_before_null_batch from public.inventory_physical_grain_locks \gset
+select public.inventory_lock_physical_grains(jsonb_build_array(jsonb_build_object(
+  'tenant_id','71000000-0000-0000-0000-000000000001',
+  'organization_id','71000000-0000-0000-0000-000000000002',
+  'facility_id','71000000-0000-0000-0000-000000000003',
+  'location_id','71000000-0000-0000-0000-000000000011',
+  'inventory_item_profile_id','71000000-0000-0000-0000-000000000007',
+  'batch_id',null,'recording_channel','system','disposition','quarantine'
+)));
+select public.inventory_physical_grain_key('71000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000002','71000000-0000-0000-0000-000000000003','71000000-0000-0000-0000-000000000011','71000000-0000-0000-0000-000000000007',null,'system','quarantine') as null_batch_key,public.inventory_physical_grain_key('71000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000002','71000000-0000-0000-0000-000000000003','71000000-0000-0000-0000-000000000011','71000000-0000-0000-0000-000000000007','71000000-0000-0000-0000-000000000012','system','quarantine') as nonnull_batch_key \gset
+select public.transfer_test_assert(
+  (select count(*) from public.inventory_physical_grain_locks)=:'lock_registry_before_null_batch'::int+1
+  and :'null_batch_key'<>:'nonnull_batch_key'
+  and position('null' in :'null_batch_key')>0,
+  'null batch is a stable, explicit canonical grain dimension'
+);
+
+-- Projection revalidation is explicitly bound to the locked transfer scope.
+select public.transfer_test_assert(
+  position('bp.tenant_id=transfer_row.tenant_id' in pg_get_functiondef('public.issue_inventory_transfer(uuid,jsonb,text,text,text)'::regprocedure))>0
+  and position('bp.organization_id=transfer_row.organization_id' in pg_get_functiondef('public.issue_inventory_transfer(uuid,jsonb,text,text,text)'::regprocedure))>0
+  and position('bp.facility_id=transfer_row.facility_id' in pg_get_functiondef('public.issue_inventory_transfer(uuid,jsonb,text,text,text)'::regprocedure))>0
+  and position('bp.batch_id is not distinct from allocation_row.batch_id' in pg_get_functiondef('public.issue_inventory_transfer(uuid,jsonb,text,text,text)'::regprocedure))>0
+  and position('bp.tenant_id=transfer_row.tenant_id' in pg_get_functiondef('public.post_inventory_transfer_resolution(uuid,public.inventory_transfer_operation_type,jsonb,text,text,text)'::regprocedure))>0
+  and position('bp.organization_id=transfer_row.organization_id' in pg_get_functiondef('public.post_inventory_transfer_resolution(uuid,public.inventory_transfer_operation_type,jsonb,text,text,text)'::regprocedure))>0
+  and position('bp.facility_id=transfer_row.facility_id' in pg_get_functiondef('public.post_inventory_transfer_resolution(uuid,public.inventory_transfer_operation_type,jsonb,text,text,text)'::regprocedure))>0
+  and position('bp.batch_id is not distinct from allocation_row.batch_id' in pg_get_functiondef('public.post_inventory_transfer_resolution(uuid,public.inventory_transfer_operation_type,jsonb,text,text,text)'::regprocedure))>0,
+  'issue and resolution revalidation match the scoped physical projection grain'
+);
 \echo 'PASS: inventory Phase Two transfer planning, reservation, idempotency, issue, rejection, return, receipt, status, ledger and audit tests'
 rollback;
