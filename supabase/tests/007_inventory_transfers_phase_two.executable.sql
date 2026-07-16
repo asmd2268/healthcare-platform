@@ -39,7 +39,7 @@ begin
  insert into public.user_role_assignments(user_id,role_id,tenant_id,organization_id,facility_id) values(u,role_id,t,o,f),(approver,approver_role,t,o,f),(narrow,narrow_role,t,o,f);
  insert into public.catalog_items(id,item_name_en,created_by,updated_by) values(ci,'Transfer item',u,u); insert into public.inventory_units(id,code,name_en,created_by) values(iu,'TRU','Transfer unit',u); insert into public.inventory_item_profiles(id,tenant_id,organization_id,facility_id,catalog_item_id,created_by,updated_by) values(ip,t,o,f,ci,u,u); insert into public.inventory_item_units(inventory_item_profile_id,inventory_unit_id,multiplier_to_base,is_base_unit,active,created_by,updated_by) values(ip,iu,1,true,true,u,u); update public.inventory_item_profiles set active=true where id=ip;
  insert into public.inventory_locations(id,tenant_id,organization_id,facility_id,department_id,code,name_en,location_kind,created_by,updated_by) values(src,t,o,f,d,'SRC','Source','storage',u,u),(dst,t,o,f,d,'DST','Receiving root','storage',u,u),(child,t,o,f,d,'DST-CHILD','Receiving child','storage',u,u); update public.inventory_locations set parent_location_id=dst where id=child;
- insert into public.inventory_batches(id,inventory_item_profile_id,lot_number,lot_status,expiry_date,expiry_status,created_by,updated_by) values(b,ip,'TR-LOT','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000025',ip,'TR-CLOSURE-LOT','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000065',ip,'TR-LINE-BOUND-A','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000066',ip,'TR-LINE-BOUND-B','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000077',ip,'TR-LIFECYCLE-RESERVED','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000084',ip,'TR-LIFECYCLE-COMPLETED','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000090',ip,'TR-CLOSURE-PERMISSION','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000095',ip,'TR-CLOSURE-LINE-A','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000096',ip,'TR-CLOSURE-LINE-B','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000105',ip,'TR-RESERVATION-AGGREGATE','known',current_date+30,'known_valid',u,u);
+ insert into public.inventory_batches(id,inventory_item_profile_id,lot_number,lot_status,expiry_date,expiry_status,created_by,updated_by) values(b,ip,'TR-LOT','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000025',ip,'TR-CLOSURE-LOT','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000065',ip,'TR-LINE-BOUND-A','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000066',ip,'TR-LINE-BOUND-B','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000077',ip,'TR-LIFECYCLE-RESERVED','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000084',ip,'TR-LIFECYCLE-COMPLETED','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000090',ip,'TR-CLOSURE-PERMISSION','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000095',ip,'TR-CLOSURE-LINE-A','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000096',ip,'TR-CLOSURE-LINE-B','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000105',ip,'TR-RESERVATION-AGGREGATE','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000120',ip,'TR-NO-PROJECTION','known',current_date+30,'known_valid',u,u);
 end $$;
 
 set local role authenticated;
@@ -213,6 +213,103 @@ select public.create_inventory_transfer('71000000-0000-0000-0000-000000000001','
 select public.transfer_test_assert(:'transfer_id'::uuid=:'transfer_replay'::uuid,'create command replay returns same transfer');
 select id as allocation_id from public.inventory_transfer_allocations where transfer_line_id in (select id from public.inventory_transfer_lines where transfer_id=:'transfer_id') \gset
 select public.transfer_test_expect_failure(format('update public.inventory_transfers set status=''completed'' where id=%L::uuid',:'transfer_id'),'permission denied');
+
+-- Reserve fail-closed regression. A line cannot have two allocations of the
+-- same physical grain by schema, so ATP aggregation across a command is one
+-- grain per allocation; the fixture below proves both that uniqueness and that
+-- already-active reservations are included before a new reservation is added.
+reset role;
+savepoint reserve_fail_closed_regressions;
+insert into public.inventory_transfers(id,tenant_id,organization_id,facility_id,source_location_id,destination_root_location_id,transit_location_id,created_by,updated_by)
+select v.id,t.tenant_id,t.organization_id,t.facility_id,t.source_location_id,t.destination_root_location_id,t.transit_location_id,'71000000-0000-0000-0000-000000000005','71000000-0000-0000-0000-000000000005'
+from public.inventory_transfers t
+cross join (values
+  ('71000000-0000-0000-0000-000000000121'::uuid),
+  ('71000000-0000-0000-0000-000000000124'::uuid),
+  ('71000000-0000-0000-0000-000000000127'::uuid)
+) v(id)
+where t.id=:'transfer_id'::uuid;
+insert into public.inventory_transfer_lines(id,transfer_id,inventory_item_profile_id,requested_quantity_base,created_by) values
+ ('71000000-0000-0000-0000-000000000122','71000000-0000-0000-0000-000000000121','71000000-0000-0000-0000-000000000007',1,'71000000-0000-0000-0000-000000000005'),
+ ('71000000-0000-0000-0000-000000000125','71000000-0000-0000-0000-000000000124','71000000-0000-0000-0000-000000000007',8,'71000000-0000-0000-0000-000000000005'),
+ ('71000000-0000-0000-0000-000000000128','71000000-0000-0000-0000-000000000127','71000000-0000-0000-0000-000000000007',5,'71000000-0000-0000-0000-000000000005');
+insert into public.inventory_transfer_allocations(id,transfer_line_id,source_location_id,batch_id,recording_channel,planned_quantity_base,created_by) values
+ ('71000000-0000-0000-0000-000000000123','71000000-0000-0000-0000-000000000122','71000000-0000-0000-0000-000000000009','71000000-0000-0000-0000-000000000120','system',1,'71000000-0000-0000-0000-000000000005'),
+ ('71000000-0000-0000-0000-000000000126','71000000-0000-0000-0000-000000000125','71000000-0000-0000-0000-000000000009','71000000-0000-0000-0000-000000000025','system',8,'71000000-0000-0000-0000-000000000005'),
+ ('71000000-0000-0000-0000-000000000129','71000000-0000-0000-0000-000000000128','71000000-0000-0000-0000-000000000009','71000000-0000-0000-0000-000000000025','system',5,'71000000-0000-0000-0000-000000000005');
+do $$
+begin
+  begin
+    insert into public.inventory_transfer_allocations(transfer_line_id,source_location_id,batch_id,recording_channel,planned_quantity_base,created_by)
+    values('71000000-0000-0000-0000-000000000125','71000000-0000-0000-0000-000000000009','71000000-0000-0000-0000-000000000025','system',1,'71000000-0000-0000-0000-000000000005');
+    raise exception 'same-grain allocation uniqueness unexpectedly allowed';
+  exception when unique_violation then null;
+  end;
+end $$;
+
+set local role authenticated;
+select set_config('request.jwt.claim.role','authenticated',true),set_config('request.jwt.claim.sub','71000000-0000-0000-0000-000000000005',true);
+select public.transfer_test_expect_failure(
+  $$select public.reserve_inventory_transfer('71000000-0000-0000-0000-000000000121',null,'reserve-null-expiry-1','reserve-null-expiry-hash-0001')$$,
+  'Inventory transfer reservation denied'
+);
+select public.transfer_test_expect_failure(
+  $$select public.reserve_inventory_transfer('71000000-0000-0000-0000-000000000121',now()+interval '1 hour','reserve-no-projection-1','reserve-no-projection-hash-0001')$$,
+  'Inventory transfer reservation exceeds available-to-promise'
+);
+select public.reserve_inventory_transfer('71000000-0000-0000-0000-000000000124',now()+interval '1 hour','reserve-atp-existing-1','reserve-atp-existing-hash-0001') as reserve_atp_first \gset
+select public.reserve_inventory_transfer('71000000-0000-0000-0000-000000000124',now()+interval '1 hour','reserve-atp-existing-1','reserve-atp-existing-hash-0001') as reserve_atp_replay \gset
+select public.transfer_test_expect_failure(
+  $$select public.reserve_inventory_transfer('71000000-0000-0000-0000-000000000127',now()+interval '1 hour','reserve-atp-over-1','reserve-atp-over-hash-0001')$$,
+  'Inventory transfer reservation exceeds available-to-promise'
+);
+reset role;
+select public.transfer_test_assert(
+  :'reserve_atp_first'::uuid=:'reserve_atp_replay'::uuid
+  and (select count(*) from public.inventory_commands where idempotency_key='reserve-null-expiry-1')=0
+  and (select count(*) from public.inventory_commands where idempotency_key='reserve-no-projection-1')=0
+  and (select count(*) from public.inventory_commands where idempotency_key='reserve-atp-existing-1' and status='posted')=1
+  and (select count(*) from public.inventory_reservations where transfer_allocation_id='71000000-0000-0000-0000-000000000126')=1
+  and (select count(*) from public.inventory_commands where idempotency_key='reserve-atp-over-1')=0
+  and (select count(*) from public.inventory_reservations where transfer_allocation_id='71000000-0000-0000-0000-000000000129')=0,
+  'reserve rejects null expiry and missing stock, includes existing ATP reservations, and replays without duplicate reservations'
+);
+rollback to savepoint reserve_fail_closed_regressions;
+
+-- Repeated allocation-backed closure items must be bounded by their aggregate
+-- reservation demand, not by each individual JSON item. The trusted fixture
+-- deliberately has a reservation smaller than its editable planned quantity.
+savepoint closure_reservation_aggregate_regression;
+insert into public.inventory_transfers(id,tenant_id,organization_id,facility_id,source_location_id,destination_root_location_id,transit_location_id,status,created_by,updated_by)
+select '71000000-0000-0000-0000-000000000130',tenant_id,organization_id,facility_id,source_location_id,destination_root_location_id,transit_location_id,'reserved','71000000-0000-0000-0000-000000000005','71000000-0000-0000-0000-000000000005'
+from public.inventory_transfers where id=:'transfer_id'::uuid;
+insert into public.inventory_transfer_lines(id,transfer_id,inventory_item_profile_id,requested_quantity_base,created_by)
+values('71000000-0000-0000-0000-000000000131','71000000-0000-0000-0000-000000000130','71000000-0000-0000-0000-000000000007',10,'71000000-0000-0000-0000-000000000005');
+insert into public.inventory_transfer_allocations(id,transfer_line_id,source_location_id,batch_id,recording_channel,planned_quantity_base,created_by)
+values('71000000-0000-0000-0000-000000000132','71000000-0000-0000-0000-000000000131','71000000-0000-0000-0000-000000000009','71000000-0000-0000-0000-000000000012','system',10,'71000000-0000-0000-0000-000000000005');
+insert into public.inventory_reservations(id,transfer_allocation_id,quantity_base,expires_at,created_by)
+values('71000000-0000-0000-0000-000000000133','71000000-0000-0000-0000-000000000132',6,now()+interval '1 hour','71000000-0000-0000-0000-000000000005');
+set local role authenticated;
+select set_config('request.jwt.claim.role','authenticated',true),set_config('request.jwt.claim.sub','71000000-0000-0000-0000-000000000005',true);
+select public.issue_inventory_transfer('71000000-0000-0000-0000-000000000130',jsonb_build_array(jsonb_build_object('transfer_allocation_id','71000000-0000-0000-0000-000000000132','quantity_base',1)),'closure-reservation-issue-1','closure-reservation-issue-hash-0001','establish closure lifecycle');
+reset role;
+select (select count(*) from public.inventory_commands where idempotency_key='closure-reservation-over-1') as closure_reservation_commands,(select count(*) from public.inventory_transfer_remainder_closures where transfer_id='71000000-0000-0000-0000-000000000130') as closure_reservation_closures,(select count(*) from public.inventory_reservation_adjustments where reservation_id='71000000-0000-0000-0000-000000000133') as closure_reservation_adjustments,(select count(*) from public.inventory_transfer_events where transfer_id='71000000-0000-0000-0000-000000000130') as closure_reservation_events \gset
+set local role authenticated;
+select set_config('request.jwt.claim.role','authenticated',true),set_config('request.jwt.claim.sub','71000000-0000-0000-0000-000000000005',true);
+select public.transfer_test_expect_failure(
+  $$select public.close_inventory_transfer_remainder('71000000-0000-0000-0000-000000000130','[{"transfer_line_id":"71000000-0000-0000-0000-000000000131","transfer_allocation_id":"71000000-0000-0000-0000-000000000132","inventory_item_profile_id":"71000000-0000-0000-0000-000000000007","quantity_base":3},{"transfer_line_id":"71000000-0000-0000-0000-000000000131","transfer_allocation_id":"71000000-0000-0000-0000-000000000132","inventory_item_profile_id":"71000000-0000-0000-0000-000000000007","quantity_base":3}]'::jsonb,'closure-reservation-over-1','aggregate reservation bound')$$,
+  'Inventory transfer remainder closure exceeds reservation remaining'
+);
+reset role;
+select public.transfer_test_assert(
+  (select count(*) from public.inventory_commands where idempotency_key='closure-reservation-over-1')=:'closure_reservation_commands'::int
+  and (select count(*) from public.inventory_transfer_remainder_closures where transfer_id='71000000-0000-0000-0000-000000000130')=:'closure_reservation_closures'::int
+  and (select count(*) from public.inventory_reservation_adjustments where reservation_id='71000000-0000-0000-0000-000000000133')=:'closure_reservation_adjustments'::int
+  and (select count(*) from public.inventory_transfer_events where transfer_id='71000000-0000-0000-0000-000000000130')=:'closure_reservation_events'::int
+  and (select public.inventory_transfer_reservation_remaining('71000000-0000-0000-0000-000000000133'))=5,
+  'repeated closure items exceeding aggregate reservation remaining roll back all effects'
+);
+rollback to savepoint closure_reservation_aggregate_regression;
 
 -- Cross-allocation line-bound regression.  The intentional draft-only plan
 -- exceeds its line request; all reservations, issues, ledger, projections,
@@ -701,8 +798,10 @@ select public.receive_inventory_transfer(:'transfer_id',jsonb_build_array(jsonb_
 select public.transfer_test_assert((select count(*)=1 from public.inventory_transfer_receipt_destinations rd join public.inventory_transfer_operations op on op.id=rd.operation_id where op.transfer_id=:'transfer_id' and rd.quantity_base=op.quantity_base),'receipt child preserves operation grain and quantity');
 select public.return_rejected_inventory_transfer(:'transfer_id',jsonb_build_array(jsonb_build_object('transfer_allocation_id',:'allocation_id','quantity_base',1)),'transfer-return-2','transfer-return-hash-0001','return remaining');
 select public.close_inventory_transfer_remainder(:'transfer_id',jsonb_build_array(jsonb_build_object('transfer_line_id',(select id from public.inventory_transfer_lines where transfer_id=:'transfer_id'),'transfer_allocation_id',:'allocation_id','inventory_item_profile_id','71000000-0000-0000-0000-000000000007','quantity_base',4)),'transfer-close-1','close unissued remainder');
+select public.close_inventory_transfer_remainder(:'transfer_id',jsonb_build_array(jsonb_build_object('transfer_line_id',(select id from public.inventory_transfer_lines where transfer_id=:'transfer_id'),'transfer_allocation_id',:'allocation_id','inventory_item_profile_id','71000000-0000-0000-0000-000000000007','quantity_base',4)),'transfer-close-1','close unissued remainder');
 reset role;
 select public.transfer_test_assert((select status='completed' from public.inventory_transfers where id=:'transfer_id'),'controlled status matches derived completion');
+select public.transfer_test_assert((select count(*)=1 from public.inventory_commands where idempotency_key='transfer-close-1' and status='posted') and (select count(*)=1 from public.inventory_transfer_remainder_closures where transfer_id=:'transfer_id') and (select count(*)=1 from public.inventory_reservation_adjustments ra join public.inventory_transfer_remainder_closures c on c.id=ra.related_closure_id where c.transfer_id=:'transfer_id' and ra.adjustment_type='closure_released') and (select count(*)=1 from public.inventory_transfer_events where transfer_id=:'transfer_id' and action='inventory.transfer_remainder_closed'),'terminal closure replay creates no duplicate command, closure, adjustment or event');
 select public.transfer_test_assert((select count(*)=0 from public.inventory_transfer_operations where transfer_id=:'transfer_id' and transfer_allocation_id is null and operation_type not in ('close_remainder','cancel')),'physical operations require allocation linkage');
 select public.transfer_test_assert((select count(*)>0 from public.audit_events where entity_type='inventory_transfer' and entity_id=:'transfer_id'),'transfer events write shared audit');
 
@@ -742,8 +841,9 @@ select (select count(*) from public.inventory_ledger_entries where batch_id='710
 set local role authenticated;
 select set_config('request.jwt.claim.role','authenticated',true),set_config('request.jwt.claim.sub','71000000-0000-0000-0000-000000000005',true);
 select public.cancel_inventory_transfer('71000000-0000-0000-0000-000000000074','adjustment-cancel-1','adjustment-cancel-hash-0001','release reserved remainder');
+select public.cancel_inventory_transfer('71000000-0000-0000-0000-000000000074','adjustment-cancel-1','adjustment-cancel-hash-0001','release reserved remainder');
 reset role;
-select public.transfer_test_assert((select count(*)=1 from public.inventory_reservation_adjustments ra join public.inventory_reservations r on r.id=ra.reservation_id where r.transfer_allocation_id='71000000-0000-0000-0000-000000000076' and ra.adjustment_type='manually_released' and ra.quantity_base=4) and (select public.inventory_transfer_reservation_remaining(r.id)=0 from public.inventory_reservations r where r.transfer_allocation_id='71000000-0000-0000-0000-000000000076') and (select count(*) from public.inventory_ledger_entries where batch_id='71000000-0000-0000-0000-000000000077')=:'adjustment_cancel_before_ledger'::int and (select count(*) from public.inventory_balance_projections where batch_id='71000000-0000-0000-0000-000000000077')=:'adjustment_cancel_before_projections'::int and (select count(*) from public.inventory_reservation_events re join public.inventory_reservations r on r.id=re.reservation_id where r.transfer_allocation_id='71000000-0000-0000-0000-000000000076')=:'adjustment_cancel_before_legacy_events'::int,'cancellation releases exact remaining through adjustments without physical or legacy-event accounting effects');
+select public.transfer_test_assert((select count(*)=1 from public.inventory_commands where idempotency_key='adjustment-cancel-1' and status='posted') and (select count(*)=1 from public.inventory_transfer_operations where transfer_id='71000000-0000-0000-0000-000000000074' and operation_type='cancel') and (select count(*)=1 from public.inventory_transfer_events where transfer_id='71000000-0000-0000-0000-000000000074' and action='inventory.transfer_cancelled') and (select count(*)=1 from public.inventory_reservation_adjustments ra join public.inventory_reservations r on r.id=ra.reservation_id where r.transfer_allocation_id='71000000-0000-0000-0000-000000000076' and ra.adjustment_type='manually_released' and ra.quantity_base=4) and (select public.inventory_transfer_reservation_remaining(r.id)=0 from public.inventory_reservations r where r.transfer_allocation_id='71000000-0000-0000-0000-000000000076') and (select count(*) from public.inventory_ledger_entries where batch_id='71000000-0000-0000-0000-000000000077')=:'adjustment_cancel_before_ledger'::int and (select count(*) from public.inventory_balance_projections where batch_id='71000000-0000-0000-0000-000000000077')=:'adjustment_cancel_before_projections'::int and (select count(*) from public.inventory_reservation_events re join public.inventory_reservations r on r.id=re.reservation_id where r.transfer_allocation_id='71000000-0000-0000-0000-000000000076')=:'adjustment_cancel_before_legacy_events'::int,'cancellation replay keeps one command, operation, event and exact release adjustment without physical or legacy effects');
 
 -- Allocation closures release an exact reservation amount; line-unallocated
 -- closures intentionally have no reservation linkage or adjustment.
@@ -1048,5 +1148,25 @@ select public.transfer_test_assert(
   and position('bp.batch_id is not distinct from allocation_row.batch_id' in pg_get_functiondef('public.post_inventory_transfer_resolution(uuid,public.inventory_transfer_operation_type,jsonb,text,text,text)'::regprocedure))>0,
   'issue and resolution revalidation match the scoped physical projection grain'
 );
+
+-- Phase-two graph locking remains private and the four remaining writers use
+-- the common deterministic graph protocol before their mutable effects.
+select public.transfer_test_assert(
+  not has_function_privilege('authenticated','public.inventory_lock_transfer_execution_lines(uuid,uuid[])'::regprocedure,'execute')
+  and position('p_expires_at is null' in pg_get_functiondef('public.reserve_inventory_transfer(uuid,timestamptz,text,text)'::regprocedure))>0
+  and position('select coalesce((' in pg_get_functiondef('public.reserve_inventory_transfer(uuid,timestamptz,text,text)'::regprocedure))>0
+  and position('inventory_lock_transfer_execution_graph' in pg_get_functiondef('public.reserve_inventory_transfer(uuid,timestamptz,text,text)'::regprocedure))>0
+  and position('inventory_lock_transfer_execution_graph' in pg_get_functiondef('public.cancel_inventory_transfer(uuid,text,text,text)'::regprocedure))>0
+  and position('inventory_lock_transfer_execution_lines' in pg_get_functiondef('public.close_inventory_transfer_remainder(uuid,jsonb,text,text)'::regprocedure))>0
+  and position('inventory_lock_transfer_execution_graph' in pg_get_functiondef('public.expire_inventory_transfer_reservations(uuid,integer)'::regprocedure))>0,
+  'reserve, cancel, closure and expiry use private deterministic execution graph locks'
+);
+
+set local role authenticated;
+select public.transfer_test_expect_failure(
+  $$select public.inventory_lock_transfer_execution_lines('71000000-0000-0000-0000-000000000021',array['71000000-0000-0000-0000-000000000022']::uuid[])$$,
+  'permission denied'
+);
+reset role;
 \echo 'PASS: inventory Phase Two transfer planning, reservation, idempotency, issue, rejection, return, receipt, status, ledger and audit tests'
 rollback;
