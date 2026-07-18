@@ -1,0 +1,153 @@
+name: Inventory Database Concurrency
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/**'
+      - 'scripts/**'
+      - '.github/workflows/**'
+      - 'package.json'
+      - 'package-lock.json'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/**'
+      - 'scripts/**'
+      - '.github/workflows/**'
+      - 'package.json'
+      - 'package-lock.json'
+
+permissions:
+  contents: read
+
+jobs:
+  inventory-database-concurrency:
+    name: inventory-database-concurrency
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.109.1
+
+      - name: Prepare diagnostics directory
+        run: mkdir -p "$RUNNER_TEMP/inventory-database-concurrency-artifacts"
+
+      - name: Validate concurrency script syntax
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bash -n supabase/tests/008_inventory_transfers_phase_two_concurrency.sh
+
+      - name: Start and reset local Supabase
+        id: supabase
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          timeout --signal=TERM --kill-after=30s 10m supabase start
+
+          status_json="$RUNNER_TEMP/inventory-database-concurrency-status.json"
+          for attempt in $(seq 1 30); do
+            if supabase status --output json >"$status_json" 2>/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          [[ -s "$status_json" ]] || { echo 'FAIL: Supabase local services did not become ready' >&2; exit 1; }
+
+          local_db_url="$(node - "$status_json" <<'NODE'
+          const fs = require('node:fs');
+          const value = JSON.parse(fs.readFileSync(process.argv[2], 'utf8')).DB_URL;
+          if (typeof value !== 'string' || value === '') process.exit(1);
+          const url = new URL(value);
+          if (!['postgres:', 'postgresql:'].includes(url.protocol) || !['127.0.0.1', 'localhost', 'host.docker.internal'].includes(url.hostname)) process.exit(1);
+          process.stdout.write(value);
+          NODE
+          )" || { echo 'FAIL: Supabase did not report a safe local database URL' >&2; exit 1; }
+          echo "LOCAL_DB_URL=$local_db_url" >> "$GITHUB_ENV"
+
+          timeout --signal=TERM --kill-after=30s 10m supabase db reset
+
+      - name: Run inventory database executable tests
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          artifact_dir="$RUNNER_TEMP/inventory-database-concurrency-artifacts"
+
+          timeout --signal=TERM --kill-after=30s 5m \
+            psql "$LOCAL_DB_URL" -v ON_ERROR_STOP=1 \
+            -f supabase/tests/005_inventory_custody_phase_one.executable.sql \
+            2>&1 | tee "$artifact_dir/005_inventory_custody_phase_one.log"
+          timeout --signal=TERM --kill-after=30s 10m \
+            psql "$LOCAL_DB_URL" -v ON_ERROR_STOP=1 \
+            -f supabase/tests/007_inventory_transfers_phase_two.executable.sql \
+            2>&1 | tee "$artifact_dir/007_inventory_transfers_phase_two.log"
+          timeout --signal=TERM --kill-after=30s 15m \
+            bash supabase/tests/008_inventory_transfers_phase_two_concurrency.sh "$LOCAL_DB_URL" \
+            2>&1 | tee "$artifact_dir/008_inventory_transfers_phase_two_concurrency.log"
+
+      - name: Assert no inventory matrix PostgreSQL sessions remain
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          remaining="$(timeout --signal=TERM --kill-after=30s 1m \
+            psql "$LOCAL_DB_URL" -qAtv ON_ERROR_STOP=1 <<'SQL'
+          select count(*)
+          from pg_stat_activity
+          where application_name like 'inventory-transfer-matrix-%'
+            and pid <> pg_backend_pid();
+          SQL
+          )"
+          if [[ "$remaining" != 0 ]]; then
+            echo "FAIL: $remaining inventory transfer matrix PostgreSQL session(s) remain" >&2
+            psql "$LOCAL_DB_URL" -P pager=off -v ON_ERROR_STOP=1 <<'SQL' >&2
+            select pid, state, application_name, query
+            from pg_stat_activity
+            where application_name like 'inventory-transfer-matrix-%'
+              and pid <> pg_backend_pid()
+            order by application_name, pid;
+          SQL
+            exit 1
+          fi
+
+      - name: Collect failure diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          artifact_dir="$RUNNER_TEMP/inventory-database-concurrency-artifacts"
+          supabase status --output json 2>/dev/null | node -e "let input=''; process.stdin.on('data', chunk => input += chunk).on('end', () => { const value = JSON.parse(input); for (const key of Object.keys(value)) if (/(key|secret|password|url)/i.test(key)) value[key] = '[redacted]'; process.stdout.write(JSON.stringify(value, null, 2)); });" >"$artifact_dir/supabase-status-on-failure.json" 2>&1 || true
+          docker ps -a --format 'table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.Names}}' >"$artifact_dir/docker-ps.txt" 2>&1 || true
+          docker ps -aq --filter 'label=com.supabase.cli.project=healthcare-platform-local' | while read -r container_id; do
+            [[ -n "$container_id" ]] || continue
+            docker logs "$container_id" >"$artifact_dir/docker-${container_id}.log" 2>&1 || true
+          done || true
+          if [[ -n "${LOCAL_DB_URL:-}" ]]; then
+            psql "$LOCAL_DB_URL" -P pager=off -v ON_ERROR_STOP=1 -c "select pid, state, application_name, query from pg_stat_activity order by application_name nulls last, pid;" >"$artifact_dir/postgres-sessions.txt" 2>&1 || true
+          fi
+          df -h >"$artifact_dir/disk-usage.txt" 2>&1 || true
+
+      - name: Upload database diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: inventory-database-concurrency-diagnostics
+          path: ${{ runner.temp }}/inventory-database-concurrency-artifacts
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Stop local Supabase
+        if: always()
+        shell: bash
+        run: timeout --signal=TERM --kill-after=30s 5m supabase stop --no-backup || true
