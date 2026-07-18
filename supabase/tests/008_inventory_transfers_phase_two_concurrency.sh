@@ -44,7 +44,7 @@ cleanup() {
 }
 trap cleanup EXIT
 trap 'cleanup; exit 1' INT TERM
-t="$(uuid)"; o="$(uuid)"; f="$(uuid)"; d="$(uuid)"; user_id="$(uuid)"; approver_id="$(uuid)"; expiry_actor_id="f1000000-0000-0000-0000-000000000001"; role_id="$(uuid)"; approver_role_id="$(uuid)"; catalog="$(uuid)"; profile="$(uuid)"; unit="$(uuid)"; source="$(uuid)"; destination="$(uuid)"; batch="$(uuid)"
+t="$(uuid)"; o="$(uuid)"; f="$(uuid)"; d="$(uuid)"; user_id="$(uuid)"; unauthorized_id="$(uuid)"; approver_id="$(uuid)"; expiry_actor_id="f1000000-0000-0000-0000-000000000001"; role_id="$(uuid)"; approver_role_id="$(uuid)"; catalog="$(uuid)"; profile="$(uuid)"; unit="$(uuid)"; catalog_two="$(uuid)"; profile_two="$(uuid)"; unit_two="$(uuid)"; catalog_three="$(uuid)"; profile_three="$(uuid)"; unit_three="$(uuid)"; catalog_four="$(uuid)"; profile_four="$(uuid)"; unit_four="$(uuid)"; source="$(uuid)"; destination="$(uuid)"; batch="$(uuid)"; batch_two="$(uuid)"; batch_three="$(uuid)"; batch_four="$(uuid)"
 
 psql "$local_db_url" -qv ON_ERROR_STOP=1 <<SQL
 insert into public.tenants(id,key,name_en) values('$t','transfer-con-${t:0:8}','Transfer concurrency');
@@ -53,10 +53,11 @@ insert into public.facilities(id,tenant_id,organization_id,code,name_en) values(
 insert into public.departments(id,tenant_id,organization_id,facility_id,code,name_en) values('$d','$t','$o','$f','TRC','Transfer concurrency');
 insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at) values
 ('$user_id','00000000-0000-0000-0000-000000000000','authenticated','authenticated','${user_id}@test','not-used',now(),'{}','{}',now(),now()),
+('$unauthorized_id','00000000-0000-0000-0000-000000000000','authenticated','authenticated','${unauthorized_id}@test','not-used',now(),'{}','{}',now(),now()),
 ('$approver_id','00000000-0000-0000-0000-000000000000','authenticated','authenticated','${approver_id}@test','not-used',now(),'{}','{}',now(),now()),
 ('$expiry_actor_id','00000000-0000-0000-0000-000000000000','authenticated','authenticated','expiry-worker@transfer-concurrency.test','not-used',now(),'{}','{}',now(),now())
 on conflict (id) do nothing;
-insert into public.memberships(user_id,tenant_id,organization_id,facility_id,active) values('$user_id','$t','$o','$f',true),('$approver_id','$t','$o','$f',true),('$expiry_actor_id','$t','$o','$f',true) on conflict do nothing;
+insert into public.memberships(user_id,tenant_id,organization_id,facility_id,active) values('$user_id','$t','$o','$f',true),('$unauthorized_id','$t','$o','$f',true),('$approver_id','$t','$o','$f',true),('$expiry_actor_id','$t','$o','$f',true) on conflict do nothing;
 insert into public.roles(id,key,name_ar,name_en,scope_level) values
 ('$role_id','transfer_con_${t:0:8}','اختبار','Transfer concurrency','facility'),
 ('$approver_role_id','transfer_con_approve_${t:0:8}','اعتماد اختبار','Transfer concurrency approver','facility');
@@ -68,12 +69,34 @@ insert into public.inventory_units(id,code,name_en,created_by) values('$unit','T
 insert into public.inventory_item_profiles(id,tenant_id,organization_id,facility_id,catalog_item_id,created_by,updated_by) values('$profile','$t','$o','$f','$catalog','$user_id','$user_id');
 insert into public.inventory_item_units(inventory_item_profile_id,inventory_unit_id,multiplier_to_base,is_base_unit,active,created_by,updated_by) values('$profile','$unit',1,true,true,'$user_id','$user_id');
 update public.inventory_item_profiles set active=true where id='$profile';
+insert into public.catalog_items(id,item_name_en,created_by,updated_by) values
+('$catalog_two','Transfer concurrency item two','$user_id','$user_id'),
+('$catalog_three','Transfer concurrency item three','$user_id','$user_id'),
+('$catalog_four','Transfer concurrency item four','$user_id','$user_id');
+insert into public.inventory_units(id,code,name_en,created_by) values
+('$unit_two','TRC2-${t:0:6}','Unit two','$user_id'),
+('$unit_three','TRC3-${t:0:6}','Unit three','$user_id'),
+('$unit_four','TRC4-${t:0:6}','Unit four','$user_id');
+insert into public.inventory_item_profiles(id,tenant_id,organization_id,facility_id,catalog_item_id,created_by,updated_by) values
+('$profile_two','$t','$o','$f','$catalog_two','$user_id','$user_id'),
+('$profile_three','$t','$o','$f','$catalog_three','$user_id','$user_id'),
+('$profile_four','$t','$o','$f','$catalog_four','$user_id','$user_id');
+insert into public.inventory_item_units(inventory_item_profile_id,inventory_unit_id,multiplier_to_base,is_base_unit,active,created_by,updated_by) values
+('$profile_two','$unit_two',1,true,true,'$user_id','$user_id'),
+('$profile_three','$unit_three',1,true,true,'$user_id','$user_id'),
+('$profile_four','$unit_four',1,true,true,'$user_id','$user_id');
+update public.inventory_item_profiles set active=true where id in ('$profile_two','$profile_three','$profile_four');
 insert into public.inventory_locations(id,tenant_id,organization_id,facility_id,department_id,code,name_en,location_kind,created_by,updated_by) values('$source','$t','$o','$f','$d','SRC','Source','storage','$user_id','$user_id'),('$destination','$t','$o','$f','$d','DST','Destination','storage','$user_id','$user_id');
-insert into public.inventory_batches(id,inventory_item_profile_id,lot_number,lot_status,expiry_date,expiry_status,created_by,updated_by) values('$batch','$profile','TRC-LOT','known',current_date+30,'known_valid','$user_id','$user_id');
+insert into public.inventory_batches(id,inventory_item_profile_id,lot_number,lot_status,expiry_date,expiry_status,created_by,updated_by) values
+('$batch','$profile','TRC-LOT','known',current_date+30,'known_valid','$user_id','$user_id'),
+('$batch_two','$profile_two','TRC-LOT-2','known',current_date+30,'known_valid','$user_id','$user_id'),
+('$batch_three','$profile_three','TRC-LOT-3','known',current_date+30,'known_valid','$user_id','$user_id'),
+('$batch_four','$profile_four','TRC-LOT-4','known',current_date+30,'known_valid','$user_id','$user_id');
 SQL
 
 auth_sql="set local role authenticated; select set_config('request.jwt.claim.role','authenticated',true), set_config('request.jwt.claim.sub','$user_id',true);"
 approver_auth_sql="set local role authenticated; select set_config('request.jwt.claim.role','authenticated',true), set_config('request.jwt.claim.sub','$approver_id',true);"
+unauthorized_auth_sql="set local role authenticated; select set_config('request.jwt.claim.role','authenticated',true), set_config('request.jwt.claim.sub','$unauthorized_id',true);"
 
 open_stock() {
   local stock_batch="$1" quantity="$2" key="$3" command
@@ -219,6 +242,33 @@ SQL
   assert_no_unhandled_db_error "$name"
 }
 
+# Transfer creation accepts a caller-supplied request hash.  The current public
+# contract compares that value for idempotency; it does not re-hash or
+# canonicalize the allocation JSON inside the RPC.
+create_transfer_sql() {
+  local allocations_sql="$1" key="$2" hash="$3" reason="${4:-create concurrency}"
+  printf "select public.create_inventory_transfer('%s'::uuid,'%s'::uuid,'%s'::uuid,'%s'::uuid,'%s'::uuid,%s,'%s','%s','%s');" \
+    "$t" "$o" "$f" "$source" "$destination" "$allocations_sql" "$key" "$hash" "$reason"
+}
+
+uuid_from_worker_log() {
+  grep -Eo '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' "$1" | tail -n 1
+}
+
+successful_pair_transfer_id() {
+  if [[ "$pair_left_status" == 0 ]]; then
+    uuid_from_worker_log "$tmp_dir/${1}_left.log"
+  else
+    uuid_from_worker_log "$tmp_dir/${1}_right.log"
+  fi
+}
+
+assert_worker_error() {
+  local name="$1" expected="$2" log
+  if [[ "$pair_left_status" != 0 ]]; then log="$tmp_dir/${name}_left.log"; else log="$tmp_dir/${name}_right.log"; fi
+  grep -Fq -- "$expected" "$log" || { echo "FAIL: $name did not return expected error: $expected" >&2; cat "$log" >&2; exit 1; }
+}
+
 assert_pair_one_winner() {
   local name="$1"
   local successes=0
@@ -230,6 +280,119 @@ assert_pair_one_winner() {
     exit 1
   fi
 }
+
+assert_create_graph() {
+  local transfer_id="$1" key="$2" expected_lines="$3" expected_allocations="$4"
+  local commands transfers lines allocations events audits orphan_lines orphan_allocations cross_transfer duplicates
+  read -r commands transfers lines allocations events audits orphan_lines orphan_allocations cross_transfer duplicates <<<"$(psql "$local_db_url" -qAtF ' ' <<SQL
+select
+  (select count(*) from public.inventory_commands where requester_id='$user_id'::uuid and idempotency_key='$key' and status='posted'),
+  (select count(*) from public.inventory_transfers where id='$transfer_id'::uuid),
+  (select count(*) from public.inventory_transfer_lines where transfer_id='$transfer_id'::uuid),
+  (select count(*) from public.inventory_transfer_allocations a join public.inventory_transfer_lines l on l.id=a.transfer_line_id where l.transfer_id='$transfer_id'::uuid),
+  (select count(*) from public.inventory_transfer_events where transfer_id='$transfer_id'::uuid and action='inventory.transfer_created'),
+  (select count(*) from public.audit_events where entity_type='inventory_transfer' and entity_id='$transfer_id'::uuid and action='inventory.transfer_created'),
+  (select count(*) from public.inventory_transfer_lines l left join public.inventory_transfers tr on tr.id=l.transfer_id where tr.id is null),
+  (select count(*) from public.inventory_transfer_allocations a left join public.inventory_transfer_lines l on l.id=a.transfer_line_id where l.id is null),
+  (select count(*) from public.inventory_transfer_allocations a join public.inventory_transfer_lines l on l.id=a.transfer_line_id where l.transfer_id='$transfer_id'::uuid and not exists (select 1 from public.inventory_transfers tr where tr.id=l.transfer_id)),
+  (select count(*) from (select a.transfer_line_id from public.inventory_transfer_allocations a join public.inventory_transfer_lines l on l.id=a.transfer_line_id where l.transfer_id='$transfer_id'::uuid group by a.transfer_line_id,a.source_location_id,a.batch_id,a.recording_channel,a.source_disposition having count(*)>1) duplicated_grains);
+SQL
+)"
+  [[ "$commands" == 1 && "$transfers" == 1 && "$lines" == "$expected_lines" && "$allocations" == "$expected_allocations" && "$events" == 1 && "$audits" == 1 && "$orphan_lines" == 0 && "$orphan_allocations" == 0 && "$cross_transfer" == 0 && "$duplicates" == 0 ]] || {
+    echo "FAIL: create graph integrity failed for key=$key transfer=$transfer_id values=$commands/$transfers/$lines/$allocations/$events/$audits/$orphan_lines/$orphan_allocations/$cross_transfer/$duplicates" >&2
+    exit 1
+  }
+}
+
+create_scope_counts() {
+  psql "$local_db_url" -qAtF ' ' <<SQL
+select
+  (select count(*) from public.inventory_transfers where tenant_id='$t'::uuid),
+  (select count(*) from public.inventory_transfer_lines l join public.inventory_transfers tr on tr.id=l.transfer_id where tr.tenant_id='$t'::uuid),
+  (select count(*) from public.inventory_transfer_allocations a join public.inventory_transfer_lines l on l.id=a.transfer_line_id join public.inventory_transfers tr on tr.id=l.transfer_id where tr.tenant_id='$t'::uuid),
+  (select count(*) from public.inventory_transfer_events e join public.inventory_transfers tr on tr.id=e.transfer_id where tr.tenant_id='$t'::uuid and e.action='inventory.transfer_created'),
+  (select count(*) from public.audit_events where tenant_id='$t'::uuid and entity_type='inventory_transfer' and action='inventory.transfer_created');
+SQL
+}
+
+create_payload_two_a="jsonb_build_array(jsonb_build_object('profile_id','$profile','batch_id','$batch','quantity_base',4,'channel','system'),jsonb_build_object('profile_id','$profile_two','batch_id','$batch_two','quantity_base',6,'channel','system'))"
+create_payload_two_b="jsonb_build_array(jsonb_build_object('profile_id','$profile_two','batch_id','$batch_two','quantity_base',6,'channel','system'),jsonb_build_object('profile_id','$profile','batch_id','$batch','quantity_base',4,'channel','system'))"
+create_payload_conflict_a="jsonb_build_array(jsonb_build_object('profile_id','$profile','batch_id','$batch','quantity_base',3,'channel','system'),jsonb_build_object('profile_id','$profile_two','batch_id','$batch_two','quantity_base',4,'channel','system'))"
+create_payload_conflict_b="jsonb_build_array(jsonb_build_object('profile_id','$profile','batch_id','$batch','quantity_base',5,'channel','system'),jsonb_build_object('profile_id','$profile_two','batch_id','$batch_two','quantity_base',4,'channel','system'))"
+create_payload_invalid="jsonb_build_array(jsonb_build_object('profile_id','$profile','batch_id','$batch','quantity_base',0,'channel','system'))"
+create_payload_large="jsonb_build_array(jsonb_build_object('profile_id','$profile','batch_id','$batch','quantity_base',1,'channel','system'),jsonb_build_object('profile_id','$profile_two','batch_id','$batch_two','quantity_base',2,'channel','system'),jsonb_build_object('profile_id','$profile_three','batch_id','$batch_three','quantity_base',3,'channel','system'),jsonb_build_object('profile_id','$profile_four','batch_id','$batch_four','quantity_base',4,'channel','system'))"
+
+# Create A: exact concurrent replay with two independent line grains.
+run_pair create_exact_duplicate "$auth_sql" "$(create_transfer_sql "$create_payload_two_a" 'create-exact-duplicate' 'create-exact-duplicate-hash-0001')" "$auth_sql" "$(create_transfer_sql "$create_payload_two_a" 'create-exact-duplicate' 'create-exact-duplicate-hash-0001')"
+[[ "$pair_left_status" == 0 && "$pair_right_status" == 0 ]] || { echo "FAIL: create exact duplicate did not replay to both callers" >&2; exit 1; }
+create_a_left="$(uuid_from_worker_log "$tmp_dir/create_exact_duplicate_left.log")"; create_a_right="$(uuid_from_worker_log "$tmp_dir/create_exact_duplicate_right.log")"
+[[ -n "$create_a_left" && "$create_a_left" == "$create_a_right" ]] || { echo "FAIL: create exact duplicate returned different transfer ids" >&2; exit 1; }
+assert_create_graph "$create_a_left" create-exact-duplicate 2 2
+echo "PASS: create exact duplicate replay -> 1 command, 1 transfer, 2 lines, 2 allocations"
+
+# Create B: reordered caller JSON with a deliberately identical supplied hash
+# must replay under the current caller-hash contract.
+run_pair create_reordered_replay "$auth_sql" "$(create_transfer_sql "$create_payload_two_a" 'create-reordered' 'create-reordered-shared-hash-0001')" "$auth_sql" "$(create_transfer_sql "$create_payload_two_b" 'create-reordered' 'create-reordered-shared-hash-0001')"
+[[ "$pair_left_status" == 0 && "$pair_right_status" == 0 ]] || { echo "FAIL: reordered create did not follow current replay contract" >&2; exit 1; }
+create_b_left="$(uuid_from_worker_log "$tmp_dir/create_reordered_replay_left.log")"; create_b_right="$(uuid_from_worker_log "$tmp_dir/create_reordered_replay_right.log")"
+[[ -n "$create_b_left" && "$create_b_left" == "$create_b_right" ]] || { echo "FAIL: reordered create produced duplicate graphs" >&2; exit 1; }
+assert_create_graph "$create_b_left" create-reordered 2 2
+echo "PASS: create reordered replay -> caller-supplied identical hash returns one graph"
+
+# Create C: a conflicting hash/payload may have one winner only; the loser
+# must receive the public idempotency error and leave no child graph behind.
+run_pair create_conflicting_key "$auth_sql" "$(create_transfer_sql "$create_payload_conflict_a" 'create-conflict' 'create-conflict-hash-a-0001')" "$auth_sql" "$(create_transfer_sql "$create_payload_conflict_b" 'create-conflict' 'create-conflict-hash-b-0001')"
+assert_pair_one_winner create_conflicting_key
+assert_worker_error create_conflicting_key 'Inventory idempotency key was reused with a different request'
+create_c_transfer="$(successful_pair_transfer_id create_conflicting_key)"
+assert_create_graph "$create_c_transfer" create-conflict 2 2
+create_c_quantity="$(psql "$local_db_url" -qAtc "select sum(requested_quantity_base) from public.inventory_transfer_lines where transfer_id='$create_c_transfer'::uuid")"
+[[ "$create_c_quantity" == 7.000000 || "$create_c_quantity" == 9.000000 ]] || { echo "FAIL: conflicting create persisted a partial payload" >&2; exit 1; }
+echo "PASS: create conflicting key -> one complete winner graph and one public idempotency denial"
+
+# Create D: current schema has no business-level de-duplication across two
+# distinct create commands, so different keys intentionally create two graphs.
+run_pair create_different_keys "$auth_sql" "$(create_transfer_sql "$create_payload_two_a" 'create-different-key-a' 'create-different-key-a-hash-0001')" "$auth_sql" "$(create_transfer_sql "$create_payload_two_a" 'create-different-key-b' 'create-different-key-b-hash-0001')"
+[[ "$pair_left_status" == 0 && "$pair_right_status" == 0 ]] || { echo "FAIL: different-key creates did not both succeed" >&2; exit 1; }
+create_d_left="$(uuid_from_worker_log "$tmp_dir/create_different_keys_left.log")"; create_d_right="$(uuid_from_worker_log "$tmp_dir/create_different_keys_right.log")"
+[[ -n "$create_d_left" && -n "$create_d_right" && "$create_d_left" != "$create_d_right" ]] || { echo "FAIL: different-key creates unexpectedly shared a transfer" >&2; exit 1; }
+assert_create_graph "$create_d_left" create-different-key-a 2 2
+assert_create_graph "$create_d_right" create-different-key-b 2 2
+echo "PASS: create different keys -> two isolated complete transfer graphs"
+
+# Create E: an allocation validation failure rolls back its claimed command
+# and all graph children, while an independent valid create completes.
+read -r create_e_transfers_before create_e_lines_before create_e_allocations_before create_e_events_before create_e_audits_before <<<"$(create_scope_counts)"
+run_pair create_valid_invalid "$auth_sql" "$(create_transfer_sql "$create_payload_two_a" 'create-valid-race' 'create-valid-race-hash-0001')" "$auth_sql" "$(create_transfer_sql "$create_payload_invalid" 'create-invalid-race' 'create-invalid-race-hash-0001')"
+assert_pair_one_winner create_valid_invalid
+assert_worker_error create_valid_invalid 'Inventory transfer allocation denied'
+create_e_transfer="$(successful_pair_transfer_id create_valid_invalid)"
+assert_create_graph "$create_e_transfer" create-valid-race 2 2
+[[ "$(psql "$local_db_url" -qAtc "select count(*) from public.inventory_commands where requester_id='$user_id'::uuid and idempotency_key='create-invalid-race'")" == 0 ]] || { echo "FAIL: invalid create retained a command" >&2; exit 1; }
+read -r create_e_transfers_after create_e_lines_after create_e_allocations_after create_e_events_after create_e_audits_after <<<"$(create_scope_counts)"
+(( create_e_transfers_after == create_e_transfers_before + 1 && create_e_lines_after == create_e_lines_before + 2 && create_e_allocations_after == create_e_allocations_before + 2 && create_e_events_after == create_e_events_before + 1 && create_e_audits_after == create_e_audits_before + 1 )) || { echo "FAIL: invalid create left a partial graph or audit effect" >&2; exit 1; }
+echo "PASS: create valid versus invalid -> valid graph committed, invalid graph fully rolled back"
+
+# Create F: authorization is checked before command ownership, so the denied
+# caller cannot create or replay a command owned by an authorized user.
+read -r create_f_transfers_before create_f_lines_before create_f_allocations_before create_f_events_before create_f_audits_before <<<"$(create_scope_counts)"
+run_pair create_authorized_unauthorized "$auth_sql" "$(create_transfer_sql "$create_payload_two_a" 'create-authorized-race' 'create-authorized-race-hash-0001')" "$unauthorized_auth_sql" "$(create_transfer_sql "$create_payload_two_a" 'create-unauthorized-race' 'create-unauthorized-race-hash-0001')"
+assert_pair_one_winner create_authorized_unauthorized
+assert_worker_error create_authorized_unauthorized 'Inventory transfer creation denied'
+create_f_transfer="$(successful_pair_transfer_id create_authorized_unauthorized)"
+assert_create_graph "$create_f_transfer" create-authorized-race 2 2
+[[ "$(psql "$local_db_url" -qAtc "select count(*) from public.inventory_commands where requester_id='$unauthorized_id'::uuid and idempotency_key='create-unauthorized-race'")" == 0 ]] || { echo "FAIL: unauthorized create retained a command" >&2; exit 1; }
+read -r create_f_transfers_after create_f_lines_after create_f_allocations_after create_f_events_after create_f_audits_after <<<"$(create_scope_counts)"
+(( create_f_transfers_after == create_f_transfers_before + 1 && create_f_lines_after == create_f_lines_before + 2 && create_f_allocations_after == create_f_allocations_before + 2 && create_f_events_after == create_f_events_before + 1 && create_f_audits_after == create_f_audits_before + 1 )) || { echo "FAIL: unauthorized create left a partial graph or audit effect" >&2; exit 1; }
+echo "PASS: create unauthorized versus authorized -> denied caller left no command or graph"
+
+# Create G: a four-line aggregate must be all-or-nothing under concurrent replay.
+run_pair create_large_atomic "$auth_sql" "$(create_transfer_sql "$create_payload_large" 'create-large-atomic' 'create-large-atomic-hash-0001')" "$auth_sql" "$(create_transfer_sql "$create_payload_large" 'create-large-atomic' 'create-large-atomic-hash-0001')"
+[[ "$pair_left_status" == 0 && "$pair_right_status" == 0 ]] || { echo "FAIL: large create replay did not return to both callers" >&2; exit 1; }
+create_g_left="$(uuid_from_worker_log "$tmp_dir/create_large_atomic_left.log")"; create_g_right="$(uuid_from_worker_log "$tmp_dir/create_large_atomic_right.log")"
+[[ -n "$create_g_left" && "$create_g_left" == "$create_g_right" ]] || { echo "FAIL: large create produced incomplete or duplicate graphs" >&2; exit 1; }
+assert_create_graph "$create_g_left" create-large-atomic 4 4
+echo "PASS: create large multi-line atomicity -> 1 complete four-line graph"
 
 make_expired_transfer() {
   local key="$1" quantity="$2"
@@ -532,4 +695,4 @@ reconciliation="$(psql "$local_db_url" -qAtc "select count(*) from (select bp.lo
 # grain used by this harness must reconcile with the immutable ledger.
 [[ "$reconciliation" == 0 ]] || { echo "FAIL: unexpected projection reconciliation result=$reconciliation" >&2; exit 1; }
 echo "PASS: ledger/projection reconciliation -> all fixture and Phase Two physical grains reconcile"
-echo "PASS: full transfer concurrency matrix (duplicate issue, duplicate receipt, competing reservations, cancel/issue, close/issue, expiry/cancel, expiry/close, expiry/issue, duplicate cancel, duplicate close, two expiry workers)"
+echo "PASS: full transfer concurrency matrix (create duplicate/reordered/conflict/different-key/invalid/authorization/large-atomicity; duplicate issue, duplicate receipt, competing reservations, cancel/issue, close/issue, expiry/cancel, expiry/close, expiry/issue, duplicate cancel, duplicate close, two expiry workers)"
