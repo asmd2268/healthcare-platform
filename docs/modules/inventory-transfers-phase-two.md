@@ -13,7 +13,13 @@ Phase Two adds facility-local stock transfers on top of the Phase One ledger. It
 
 `inventory_transfer_allocations` holds only draft plans. `inventory_transfer_operations`, immutable `inventory_reservation_adjustments`, ledger entries, and read-only summary projections are the execution truth. `inventory_reservation_events` is retained only as deprecated historical evidence and is no longer an accounting source.
 
-Reservation remaining is derived as `reservation.quantity - sum(reservation adjustments)`. Each posted issue writes an `issue_consumed` adjustment; cancellation writes `manually_released`; allocation-linked remainder closure writes `closure_released`. These rows and reservations are append-only. Expiry adjustment automation is deferred, while expired reservations continue to be excluded from available-to-promise by their expiry timestamp. ATP is physical `available` stock less active, unexpired reservation remaining.
+Reservation remaining is derived as `reservation.quantity - sum(reservation adjustments)`. Each posted issue writes an `issue_consumed` adjustment; cancellation writes `manually_released`; allocation-linked remainder closure writes `closure_released`; trusted expiry processing writes `expiry_released`. These rows and reservations are append-only. ATP is physical `available` stock less active, unexpired reservation remaining.
+
+### Reservation-expiry worker
+
+`expire_inventory_transfer_reservations(p_actor uuid, p_limit integer default 100)` is a `service_role`-only, bounded database worker. The caller supplies an authorized actor; for each selected reservation that actor must currently hold `inventory.transfer.reserve` in the transfer scope. The worker rejects null or out-of-range limits (`1`–`1000`), selects candidates deterministically by expiry timestamp and reservation ID with `FOR UPDATE SKIP LOCKED`, then acquires the transfer execution graph locks and recomputes the remaining quantity.
+
+For each still-expired positive remainder, it uses the stable `reservation-expiry:<reservation-id>` command key and an append-only `expiry_released` adjustment for the exact remaining quantity. Replays therefore create no second adjustment, transfer event, or audit event. Expiry materialization is non-physical: it creates no inventory transaction, ledger entry, or balance-projection movement. ATP already excludes expired reservations by timestamp, so materializing the adjustment preserves ATP while making the expired reservation's derived remaining quantity zero. `SKIP LOCKED` is only worker scheduling; deterministic graph locks and post-lock revalidation protect races with issue, cancellation, remainder closure, and other expiry workers.
 
 The controlled transfer status is refreshed from operations; clients cannot alter it. The lifecycle is `draft → reserved → partially_issued|issued → receiving → completed`; cancellation is possible only before issue. `close_inventory_transfer_remainder` explicitly closes unissued demand and releases its reservation. Rejected stock moves from transit to `returns_hold`, then only `return` or `dispose_rejected` can consume it.
 
@@ -35,4 +41,4 @@ Closing post-issue demand requires the dedicated `inventory.transfer.close_remai
 
 ## Deferred
 
-Cross-facility transfers, supplier receipt/procurement, custody, controlled wastage approval, attachments/imports, CAPA adapters, UI, notifications, printing, and reporting remain out of scope. Expiry adjustments, legacy reservation-event backfill, automation identity, standalone manual release, correction/reversal adjustments, shared locking, and concurrency expansion remain deferred.
+Cross-facility transfers, supplier receipt/procurement, custody, controlled wastage approval, attachments/imports, CAPA adapters, UI, notifications, printing, and reporting remain out of scope. Legacy reservation-event backfill, automation identity, standalone manual release, and correction/reversal adjustments remain deferred.
