@@ -2,27 +2,39 @@ name: Inventory Database Concurrency
 
 on:
   pull_request:
-    paths:
-      - 'supabase/**'
-      - 'scripts/**'
-      - '.github/workflows/**'
-      - 'package.json'
-      - 'package-lock.json'
   push:
     branches: [main]
-    paths:
-      - 'supabase/**'
-      - 'scripts/**'
-      - '.github/workflows/**'
-      - 'package.json'
-      - 'package-lock.json'
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
-  inventory-database-concurrency:
-    name: inventory-database-concurrency
+  detect_database_changes:
+    name: detect-database-changes
+    runs-on: ubuntu-latest
+    outputs:
+      relevant: ${{ steps.filter.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            relevant:
+              - 'supabase/**'
+              - 'scripts/**'
+              - '.github/workflows/**'
+              - 'package.json'
+              - 'package-lock.json'
+
+  inventory_database_tests:
+    name: inventory-database-tests
+    needs: detect_database_changes
+    if: needs.detect_database_changes.outputs.relevant == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -151,3 +163,40 @@ jobs:
         if: always()
         shell: bash
         run: timeout --signal=TERM --kill-after=30s 5m supabase stop --no-backup || true
+
+  inventory_database_concurrency:
+    name: inventory-database-concurrency
+    needs: [detect_database_changes, inventory_database_tests]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Enforce required database check result
+        shell: bash
+        env:
+          DETECTION_RESULT: ${{ needs.detect_database_changes.result }}
+          RELEVANT_CHANGES: ${{ needs.detect_database_changes.outputs.relevant }}
+          DATABASE_RESULT: ${{ needs.inventory_database_tests.result }}
+        run: |
+          set -Eeuo pipefail
+          if [[ "$DETECTION_RESULT" != 'success' ]]; then
+            echo "FAIL: database change detection ended as $DETECTION_RESULT" >&2
+            exit 1
+          fi
+
+          case "$RELEVANT_CHANGES" in
+            false)
+              echo 'PASS: no database-concurrency-relevant files changed'
+              ;;
+            true)
+              if [[ "$DATABASE_RESULT" != 'success' ]]; then
+                echo "FAIL: inventory database tests ended as $DATABASE_RESULT" >&2
+                exit 1
+              fi
+              echo 'PASS: inventory database tests completed successfully'
+              ;;
+            *)
+              echo "FAIL: unexpected database change detector output: $RELEVANT_CHANGES" >&2
+              exit 1
+              ;;
+          esac
