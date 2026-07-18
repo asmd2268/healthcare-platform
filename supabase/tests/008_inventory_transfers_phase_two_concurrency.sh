@@ -99,12 +99,12 @@ approver_auth_sql="set local role authenticated; select set_config('request.jwt.
 unauthorized_auth_sql="set local role authenticated; select set_config('request.jwt.claim.role','authenticated',true), set_config('request.jwt.claim.sub','$unauthorized_id',true);"
 
 open_stock() {
-  local stock_batch="$1" quantity="$2" key="$3" command
+  local stock_batch="$1" quantity="$2" key="$3" stock_profile="${4:-$profile}" command
   command="$(psql "$local_db_url" -qAtv ON_ERROR_STOP=1 <<SQL | tail -n 1
 begin; $auth_sql
 select public.create_inventory_opening_command('$t'::uuid,'$o'::uuid,'$f'::uuid,'opening',jsonb_build_array(
-  jsonb_build_object('profile_id','$profile','batch_id','$stock_batch','unit_id',(select id from public.inventory_item_units where inventory_item_profile_id='$profile'::uuid and is_base_unit and active),'channel','system','account_type','physical','location_id','$source','disposition','available','quantity_base',$quantity),
-  jsonb_build_object('profile_id','$profile','batch_id','$stock_batch','unit_id',(select id from public.inventory_item_units where inventory_item_profile_id='$profile'::uuid and is_base_unit and active),'channel','system','account_type','external_control','quantity_base',-$quantity)
+  jsonb_build_object('profile_id','$stock_profile','batch_id','$stock_batch','unit_id',(select id from public.inventory_item_units where inventory_item_profile_id='$stock_profile'::uuid and is_base_unit and active),'channel','system','account_type','physical','location_id','$source','disposition','available','quantity_base',$quantity),
+  jsonb_build_object('profile_id','$stock_profile','batch_id','$stock_batch','unit_id',(select id from public.inventory_item_units where inventory_item_profile_id='$stock_profile'::uuid and is_base_unit and active),'channel','system','account_type','external_control','quantity_base',-$quantity)
 ),'opening-$key','opening-$key-hash-00000001','concurrency fixture');
 commit;
 SQL
@@ -129,13 +129,13 @@ SQL
 # This makes reservations, projections, commands and idempotency keys isolated
 # without relying on UUID ordering or the result of a previous scenario.
 scenario_batch() {
-  local key="$1" stock="$2"
+  local key="$1" stock="$2" stock_profile="${3:-$profile}"
   scenario_batch_id="$(uuid)"
   psql "$local_db_url" -qv ON_ERROR_STOP=1 <<SQL >/dev/null
 insert into public.inventory_batches(id,inventory_item_profile_id,lot_number,lot_status,expiry_date,expiry_status,created_by,updated_by)
-values('$scenario_batch_id','$profile','TRC-${key}-${scenario_batch_id:0:8}','known',current_date+30,'known_valid','$user_id','$user_id');
+values('$scenario_batch_id','$stock_profile','TRC-${key}-${scenario_batch_id:0:8}','known',current_date+30,'known_valid','$user_id','$user_id');
 SQL
-  open_stock "$scenario_batch_id" "$stock" "scenario-$key"
+  open_stock "$scenario_batch_id" "$stock" "scenario-$key" "$stock_profile"
 }
 
 make_reserved_transfer() {
@@ -158,6 +158,31 @@ begin; $auth_sql
 select public.issue_inventory_transfer('$transfer_id'::uuid,jsonb_build_array(jsonb_build_object('transfer_allocation_id','$allocation_id','quantity_base',$quantity)),'$key','$key-hash-00000001','concurrency fixture issue');
 commit;
 SQL
+}
+
+make_issued_resolution_transfer() {
+  local key="$1" quantity="$2"
+  scenario_batch "$key" "$quantity"
+  make_reserved_transfer "$key" "$quantity"
+  issue_fixture_quantity "$scenario_transfer" "$scenario_allocation" "$quantity" "$key-public-issue"
+  local issued transit remaining status
+  read -r issued transit remaining status <<<"$(psql "$local_db_url" -qAtF ' ' -c "select (select coalesce(sum(quantity_base),0) from public.inventory_transfer_operations where transfer_id='$scenario_transfer'::uuid and operation_type='issue'),(select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id=(select transit_location_id from public.inventory_transfers where id='$scenario_transfer'::uuid) and batch_id='$scenario_batch_id'::uuid and recording_channel='system' and disposition='transit'),public.inventory_transfer_reservation_remaining('$scenario_reservation'::uuid),(select status from public.inventory_transfers where id='$scenario_transfer'::uuid)")"
+  [[ "$(psql "$local_db_url" -qAtc "select $issued=$quantity and $transit=$quantity and $remaining=0")" == t && "$status" == issued ]] || { echo "FAIL: $key issued resolution fixture is incomplete" >&2; exit 1; }
+  assert_transfer_reconciles "$scenario_transfer"
+}
+
+make_rejected_resolution_transfer() {
+  local key="$1" quantity="$2"
+  make_issued_resolution_transfer "$key" "$quantity"
+  psql "$local_db_url" -qv ON_ERROR_STOP=1 <<SQL >/dev/null
+begin; $auth_sql
+select public.reject_inventory_transfer('$scenario_transfer'::uuid,jsonb_build_array(jsonb_build_object('transfer_allocation_id','$scenario_allocation','quantity_base',$quantity)),'$key-setup-reject','$key-setup-reject-hash-0001','resolution fixture reject');
+commit;
+SQL
+  local rejected transit
+  read -r rejected transit <<<"$(psql "$local_db_url" -qAtF ' ' -c "select (select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id=(select transit_location_id from public.inventory_transfers where id='$scenario_transfer'::uuid) and batch_id='$scenario_batch_id'::uuid and recording_channel='system' and disposition='returns_hold'),(select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id=(select transit_location_id from public.inventory_transfers where id='$scenario_transfer'::uuid) and batch_id='$scenario_batch_id'::uuid and recording_channel='system' and disposition='transit')")"
+  [[ "$(psql "$local_db_url" -qAtc "select $rejected=$quantity and $transit=0")" == t ]] || { echo "FAIL: $key rejected resolution fixture is incomplete" >&2; exit 1; }
+  assert_transfer_reconciles "$scenario_transfer"
 }
 
 assert_no_unhandled_db_error() {
@@ -432,7 +457,7 @@ SQL
 assert_transfer_reconciles() {
   local transfer_id="$1"
   local mismatch
-  mismatch="$(psql "$local_db_url" -qAtc "select count(*) from (select bp.id,bp.quantity_base,coalesce(sum(le.quantity_base),0) as ledger_quantity from public.inventory_balance_projections bp left join public.inventory_ledger_entries le on le.account_type='physical' and le.location_id=bp.location_id and le.inventory_item_profile_id=bp.inventory_item_profile_id and le.batch_id is not distinct from bp.batch_id and le.recording_channel=bp.recording_channel and le.disposition=bp.disposition where bp.inventory_item_profile_id='$profile'::uuid and bp.batch_id in (select a.batch_id from public.inventory_transfer_allocations a join public.inventory_transfer_lines l on l.id=a.transfer_line_id where l.transfer_id='$transfer_id'::uuid) group by bp.id) q where q.quantity_base is distinct from q.ledger_quantity")"
+  mismatch="$(psql "$local_db_url" -qAtc "select count(*) from (select bp.id,bp.quantity_base,coalesce(sum(le.quantity_base),0) as ledger_quantity from public.inventory_balance_projections bp left join public.inventory_ledger_entries le on le.account_type='physical' and le.location_id=bp.location_id and le.inventory_item_profile_id=bp.inventory_item_profile_id and le.batch_id is not distinct from bp.batch_id and le.recording_channel=bp.recording_channel and le.disposition=bp.disposition where bp.tenant_id='$t'::uuid and bp.batch_id in (select a.batch_id from public.inventory_transfer_allocations a join public.inventory_transfer_lines l on l.id=a.transfer_line_id where l.transfer_id='$transfer_id'::uuid) group by bp.id) q where q.quantity_base is distinct from q.ledger_quantity")"
   [[ "$mismatch" == 0 ]] || { echo "FAIL: transfer $transfer_id ledger/projection mismatch=$mismatch" >&2; exit 1; }
 }
 transfer="$(create_transfer issue-create 10)"
@@ -462,9 +487,258 @@ read -r issue_commands issue_operations issue_transactions issue_events issue_au
 echo "PASS: duplicate issue replay -> $workers/$workers, 1 command, 1 operation, 1 transaction"
 
 run_parallel receipt "select public.receive_inventory_transfer('$transfer'::uuid,jsonb_build_array(jsonb_build_object('transfer_allocation_id','$allocation','quantity_base',10,'destination_location_id','$destination','destination_disposition','available')),'duplicate-receipt','duplicate-receipt-request-hash-0001','concurrent receipt');"
-read -r receipt_commands receipts destination_children transit_after destination_qty <<<"$(psql "$local_db_url" -v ON_ERROR_STOP=1 -qAtF ' ' -c "select (select count(*) from public.inventory_commands where requester_id='$user_id'::uuid and idempotency_key='duplicate-receipt'),(select count(*) from public.inventory_transfer_operations where transfer_id='$transfer'::uuid and operation_type='receive'),(select count(*) from public.inventory_transfer_receipt_destinations rd join public.inventory_transfer_operations op on op.id=rd.operation_id where op.transfer_id='$transfer'::uuid and rd.quantity_base=op.quantity_base),(select quantity_base from public.inventory_balance_projections where location_id=(select transit_location_id from public.inventory_transfers where id='$transfer'::uuid) and disposition='transit'),(select quantity_base from public.inventory_balance_projections where location_id='$destination'::uuid and disposition='available')")"
-[[ "$receipt_commands" == 1 && "$receipts" == 1 && "$destination_children" == 1 && "$transit_after" == 0.000000 && "$destination_qty" == 10.000000 ]] || { echo "FAIL: duplicate receipt reconciliation" >&2; exit 1; }
-echo "PASS: duplicate receipt replay -> $workers/$workers, 1 command, 1 receipt, 1 destination child"
+read -r receipt_commands receipts destination_children transit_after destination_qty receipt_orphans receipt_wrong_grain receipt_wrong_scope receipt_ledger_mismatch <<<"$(psql "$local_db_url" -v ON_ERROR_STOP=1 -qAtF ' ' <<SQL
+select
+ (select count(*) from public.inventory_commands where requester_id='$user_id'::uuid and idempotency_key='duplicate-receipt'),
+ (select count(*) from public.inventory_transfer_operations where transfer_id='$transfer'::uuid and operation_type='receive'),
+ (select count(*) from public.inventory_transfer_receipt_destinations rd join public.inventory_transfer_operations op on op.id=rd.operation_id where op.transfer_id='$transfer'::uuid and rd.quantity_base=op.quantity_base),
+ (select quantity_base from public.inventory_balance_projections where location_id=(select transit_location_id from public.inventory_transfers where id='$transfer'::uuid) and disposition='transit'),
+ (select quantity_base from public.inventory_balance_projections where location_id='$destination'::uuid and disposition='available'),
+ (select count(*) from public.inventory_transfer_receipt_destinations rd left join public.inventory_transfer_operations op on op.id=rd.operation_id where op.id is null),
+ (select count(*) from public.inventory_transfer_receipt_destinations rd join public.inventory_transfer_operations op on op.id=rd.operation_id where op.transfer_id='$transfer'::uuid and (rd.destination_location_id,rd.inventory_item_profile_id,rd.batch_id,rd.recording_channel,rd.quantity_base) is distinct from (op.destination_location_id,op.inventory_item_profile_id,op.batch_id,op.recording_channel,op.quantity_base)),
+ (select count(*) from public.inventory_transfer_receipt_destinations rd join public.inventory_transfer_operations op on op.id=rd.operation_id join public.inventory_transfers tr on tr.id=op.transfer_id where op.transfer_id='$transfer'::uuid and not public.inventory_transfer_location_allowed(tr.destination_root_location_id,rd.destination_location_id)),
+ (select count(*) from public.inventory_transfer_receipt_destinations rd join public.inventory_transfer_operations op on op.id=rd.operation_id where op.transfer_id='$transfer'::uuid and rd.quantity_base is distinct from coalesce((select sum(le.quantity_base) from public.inventory_ledger_entries le where le.transaction_id=op.transaction_id and le.account_type='physical' and le.location_id=rd.destination_location_id and le.inventory_item_profile_id=rd.inventory_item_profile_id and le.batch_id=rd.batch_id and le.recording_channel=rd.recording_channel and le.disposition=op.destination_disposition),0));
+SQL
+)"
+[[ "$receipt_commands" == 1 && "$receipts" == 1 && "$destination_children" == 1 && "$transit_after" == 0.000000 && "$destination_qty" == 10.000000 && "$receipt_orphans" == 0 && "$receipt_wrong_grain" == 0 && "$receipt_wrong_scope" == 0 && "$receipt_ledger_mismatch" == 0 ]] || { echo "FAIL: duplicate receipt child or ledger integrity" >&2; exit 1; }
+echo "PASS: duplicate receipt replay -> $workers/$workers, 1 receipt child with exact ledger-linked grain"
+
+# Resolution requests all use the public wrappers over the shared
+# post_inventory_transfer_resolution path.  The deterministic run_pair barrier
+# releases two independent PostgreSQL sessions at the same time.
+resolution_sql() {
+  local type="$1" transfer_id="$2" allocation_id="$3" quantity="$4" key="$5" hash="$6"
+  case "$type" in
+    receive) printf "select public.receive_inventory_transfer('%s'::uuid,jsonb_build_array(jsonb_build_object('transfer_allocation_id','%s','quantity_base',%s,'destination_location_id','%s','destination_disposition','available')),'%s','%s','resolution receive');" "$transfer_id" "$allocation_id" "$quantity" "$destination" "$key" "$hash" ;;
+    reject) printf "select public.reject_inventory_transfer('%s'::uuid,jsonb_build_array(jsonb_build_object('transfer_allocation_id','%s','quantity_base',%s)),'%s','%s','resolution reject');" "$transfer_id" "$allocation_id" "$quantity" "$key" "$hash" ;;
+    return) printf "select public.return_rejected_inventory_transfer('%s'::uuid,jsonb_build_array(jsonb_build_object('transfer_allocation_id','%s','quantity_base',%s)),'%s','%s','resolution return');" "$transfer_id" "$allocation_id" "$quantity" "$key" "$hash" ;;
+    dispose) printf "select public.dispose_rejected_inventory_transfer('%s'::uuid,jsonb_build_array(jsonb_build_object('transfer_allocation_id','%s','quantity_base',%s,'destination_disposition','quarantine')),'%s','%s','resolution dispose');" "$transfer_id" "$allocation_id" "$quantity" "$key" "$hash" ;;
+    *) echo "FAIL: unsupported resolution fixture type=$type" >&2; exit 1 ;;
+  esac
+}
+
+resolution_command_transaction_count() {
+  local key="$1"
+  psql "$local_db_url" -qAtc "select count(*) from public.inventory_transactions tx join public.inventory_commands c on c.id=tx.command_id where c.requester_id='$user_id'::uuid and c.idempotency_key='$key'"
+}
+
+resolution_command_transaction_count_for_keys() {
+  local key quoted_keys=""
+  for key in "$@"; do
+    [[ -z "$quoted_keys" ]] || quoted_keys+=","
+    quoted_keys+="'$key'"
+  done
+  psql "$local_db_url" -qAtc "select count(*) from public.inventory_transactions tx join public.inventory_commands c on c.id=tx.command_id where c.requester_id='$user_id'::uuid and c.idempotency_key in ($quoted_keys)"
+}
+
+# Resolution A: receive and reject compete for the same full transit balance.
+make_issued_resolution_transfer resolution-a 10
+res_a_transfer="$scenario_transfer"; res_a_allocation="$scenario_allocation"; res_a_batch="$scenario_batch_id"
+run_pair resolution_receive_reject "$auth_sql" "$(resolution_sql receive "$res_a_transfer" "$res_a_allocation" 10 resolution-a-receive resolution-a-receive-hash-0001)" "$auth_sql" "$(resolution_sql reject "$res_a_transfer" "$res_a_allocation" 10 resolution-a-reject resolution-a-reject-hash-0001)"
+assert_pair_one_winner resolution_receive_reject
+assert_worker_error resolution_receive_reject 'Inventory transfer resolution exceeds outstanding quantity'
+read -r res_a_receive_cmd res_a_reject_cmd res_a_receive_op res_a_reject_op res_a_receipt_child res_a_receive_tx res_a_reject_tx res_a_receive_event res_a_reject_event res_a_receive_audit res_a_reject_audit res_a_transit res_a_destination res_a_returns <<<"$(psql "$local_db_url" -qAtF ' ' <<SQL
+select
+ (select count(*) from public.inventory_commands where requester_id='$user_id'::uuid and idempotency_key='resolution-a-receive' and status='posted'),
+ (select count(*) from public.inventory_commands where requester_id='$user_id'::uuid and idempotency_key='resolution-a-reject' and status='posted'),
+ (select count(*) from public.inventory_transfer_operations where transfer_id='$res_a_transfer'::uuid and operation_type='receive'),
+ (select count(*) from public.inventory_transfer_operations where transfer_id='$res_a_transfer'::uuid and operation_type='reject'),
+ (select count(*) from public.inventory_transfer_receipt_destinations rd join public.inventory_transfer_operations op on op.id=rd.operation_id where op.transfer_id='$res_a_transfer'::uuid),
+ (select count(*) from public.inventory_transactions tx join public.inventory_commands c on c.id=tx.command_id where c.requester_id='$user_id'::uuid and c.idempotency_key='resolution-a-receive'),
+ (select count(*) from public.inventory_transactions tx join public.inventory_commands c on c.id=tx.command_id where c.requester_id='$user_id'::uuid and c.idempotency_key='resolution-a-reject'),
+ (select count(*) from public.inventory_transfer_events where transfer_id='$res_a_transfer'::uuid and action='inventory.transfer_receive'),
+ (select count(*) from public.inventory_transfer_events where transfer_id='$res_a_transfer'::uuid and action='inventory.transfer_reject'),
+ (select count(*) from public.audit_events where entity_type='inventory_transfer' and entity_id='$res_a_transfer'::uuid and action='inventory.transfer_receive'),
+ (select count(*) from public.audit_events where entity_type='inventory_transfer' and entity_id='$res_a_transfer'::uuid and action='inventory.transfer_reject'),
+ (select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id=(select transit_location_id from public.inventory_transfers where id='$res_a_transfer'::uuid) and batch_id='$res_a_batch'::uuid and recording_channel='system' and disposition='transit'),
+ (select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id='$destination'::uuid and batch_id='$res_a_batch'::uuid and recording_channel='system' and disposition='available'),
+ (select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id=(select transit_location_id from public.inventory_transfers where id='$res_a_transfer'::uuid) and batch_id='$res_a_batch'::uuid and recording_channel='system' and disposition='returns_hold');
+SQL
+)"
+res_a_receive_tx="$(resolution_command_transaction_count resolution-a-receive)"
+res_a_reject_tx="$(resolution_command_transaction_count resolution-a-reject)"
+if [[ "$res_a_receive_cmd" == 1 ]]; then
+  [[ "$res_a_reject_cmd" == 0 && "$res_a_receive_op" == 1 && "$res_a_reject_op" == 0 && "$res_a_receipt_child" == 1 && "$res_a_receive_tx" == 1 && "$res_a_reject_tx" == 0 && "$res_a_receive_event" == 1 && "$res_a_reject_event" == 0 && "$res_a_receive_audit" == 1 && "$res_a_reject_audit" == 0 && "$(psql "$local_db_url" -qAtc "select $res_a_transit=0 and $res_a_destination=10 and $res_a_returns=0")" == t ]] || { echo "FAIL: receive/reject receive-winner effects are incomplete values=$res_a_receive_cmd/$res_a_reject_cmd/$res_a_receive_op/$res_a_reject_op/$res_a_receipt_child/$res_a_receive_tx/$res_a_reject_tx/$res_a_receive_event/$res_a_reject_event/$res_a_receive_audit/$res_a_reject_audit/$res_a_transit/$res_a_destination/$res_a_returns" >&2; exit 1; }
+else
+  [[ "$res_a_reject_cmd" == 1 && "$res_a_receive_op" == 0 && "$res_a_reject_op" == 1 && "$res_a_receipt_child" == 0 && "$res_a_receive_tx" == 0 && "$res_a_reject_tx" == 1 && "$res_a_receive_event" == 0 && "$res_a_reject_event" == 1 && "$res_a_receive_audit" == 0 && "$res_a_reject_audit" == 1 && "$(psql "$local_db_url" -qAtc "select $res_a_transit=0 and $res_a_destination=0 and $res_a_returns=10")" == t ]] || { echo "FAIL: receive/reject reject-winner effects are incomplete" >&2; exit 1; }
+fi
+assert_transfer_reconciles "$res_a_transfer"
+echo "PASS: resolution receive versus reject -> exactly one full-quantity winner"
+
+# Resolution B: jointly valid partial receive/reject commands both post.
+make_issued_resolution_transfer resolution-b 10
+res_b_transfer="$scenario_transfer"; res_b_allocation="$scenario_allocation"; res_b_batch="$scenario_batch_id"
+run_pair resolution_partial_receive_reject "$auth_sql" "$(resolution_sql receive "$res_b_transfer" "$res_b_allocation" 4 resolution-b-receive resolution-b-receive-hash-0001)" "$auth_sql" "$(resolution_sql reject "$res_b_transfer" "$res_b_allocation" 6 resolution-b-reject resolution-b-reject-hash-0001)"
+[[ "$pair_left_status" == 0 && "$pair_right_status" == 0 ]] || { echo "FAIL: jointly valid partial resolution did not post both commands" >&2; exit 1; }
+read -r res_b_commands res_b_ops res_b_txs res_b_events res_b_audits res_b_children res_b_transit res_b_destination res_b_returns <<<"$(psql "$local_db_url" -qAtF ' ' <<SQL
+select
+ (select count(*) from public.inventory_commands where requester_id='$user_id'::uuid and idempotency_key in ('resolution-b-receive','resolution-b-reject') and status='posted'),
+ (select count(*) from public.inventory_transfer_operations where transfer_id='$res_b_transfer'::uuid and operation_type in ('receive','reject')),
+ (select count(*) from public.inventory_transactions tx join public.inventory_commands c on c.id=tx.command_id where c.requester_id='$user_id'::uuid and c.idempotency_key in ('resolution-b-receive','resolution-b-reject')),
+ (select count(*) from public.inventory_transfer_events where transfer_id='$res_b_transfer'::uuid and action in ('inventory.transfer_receive','inventory.transfer_reject')),
+ (select count(*) from public.audit_events where entity_type='inventory_transfer' and entity_id='$res_b_transfer'::uuid and action in ('inventory.transfer_receive','inventory.transfer_reject')),
+ (select count(*) from public.inventory_transfer_receipt_destinations rd join public.inventory_transfer_operations op on op.id=rd.operation_id where op.transfer_id='$res_b_transfer'::uuid),
+ (select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id=(select transit_location_id from public.inventory_transfers where id='$res_b_transfer'::uuid) and batch_id='$res_b_batch'::uuid and recording_channel='system' and disposition='transit'),
+ (select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id='$destination'::uuid and batch_id='$res_b_batch'::uuid and recording_channel='system' and disposition='available'),
+ (select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id=(select transit_location_id from public.inventory_transfers where id='$res_b_transfer'::uuid) and batch_id='$res_b_batch'::uuid and recording_channel='system' and disposition='returns_hold');
+SQL
+)"
+res_b_txs="$(resolution_command_transaction_count_for_keys resolution-b-receive resolution-b-reject)"
+[[ "$res_b_commands" == 2 && "$res_b_ops" == 2 && "$res_b_txs" == 2 && "$res_b_events" == 2 && "$res_b_audits" == 2 && "$res_b_children" == 1 && "$(psql "$local_db_url" -qAtc "select $res_b_transit=0 and $res_b_destination=4 and $res_b_returns=6")" == t ]] || { echo "FAIL: partial receive/reject did not produce the exact jointly valid state" >&2; exit 1; }
+assert_transfer_reconciles "$res_b_transfer"
+echo "PASS: resolution partial receive plus reject -> 4 received, 6 rejected"
+
+# Resolution C: two seven-unit claims cannot over-resolve ten issued units.
+make_issued_resolution_transfer resolution-c 10
+res_c_transfer="$scenario_transfer"; res_c_allocation="$scenario_allocation"; res_c_batch="$scenario_batch_id"
+run_pair resolution_over_receive_reject "$auth_sql" "$(resolution_sql receive "$res_c_transfer" "$res_c_allocation" 7 resolution-c-receive resolution-c-receive-hash-0001)" "$auth_sql" "$(resolution_sql reject "$res_c_transfer" "$res_c_allocation" 7 resolution-c-reject resolution-c-reject-hash-0001)"
+assert_pair_one_winner resolution_over_receive_reject
+assert_worker_error resolution_over_receive_reject 'Inventory transfer resolution exceeds outstanding quantity'
+read -r res_c_receive_posted res_c_reject_posted res_c_receive_commands res_c_reject_commands res_c_receive_ops res_c_receive_qty res_c_reject_ops res_c_reject_qty res_c_receive_tx res_c_reject_tx res_c_receive_event res_c_reject_event res_c_receive_audit res_c_reject_audit res_c_receipt_children res_c_receipt_qty res_c_receipt_correct_grain res_c_receipt_wrong_grain res_c_receive_ledger res_c_reject_ledger res_c_transit res_c_destination res_c_returns <<<"$(psql "$local_db_url" -qAtF ' ' <<SQL
+select
+ (select count(*) from public.inventory_commands where requester_id='$user_id'::uuid and idempotency_key='resolution-c-receive' and status='posted'),
+ (select count(*) from public.inventory_commands where requester_id='$user_id'::uuid and idempotency_key='resolution-c-reject' and status='posted'),
+ (select count(*) from public.inventory_commands where requester_id='$user_id'::uuid and idempotency_key='resolution-c-receive'),
+ (select count(*) from public.inventory_commands where requester_id='$user_id'::uuid and idempotency_key='resolution-c-reject'),
+ (select count(*) from public.inventory_transfer_operations where transfer_id='$res_c_transfer'::uuid and operation_type='receive'),
+ (select coalesce(sum(quantity_base),0) from public.inventory_transfer_operations where transfer_id='$res_c_transfer'::uuid and operation_type='receive'),
+ (select count(*) from public.inventory_transfer_operations where transfer_id='$res_c_transfer'::uuid and operation_type='reject'),
+ (select coalesce(sum(quantity_base),0) from public.inventory_transfer_operations where transfer_id='$res_c_transfer'::uuid and operation_type='reject'),
+ (select count(*) from public.inventory_transactions tx join public.inventory_commands c on c.id=tx.command_id where c.requester_id='$user_id'::uuid and c.idempotency_key='resolution-c-receive'),
+ (select count(*) from public.inventory_transactions tx join public.inventory_commands c on c.id=tx.command_id where c.requester_id='$user_id'::uuid and c.idempotency_key='resolution-c-reject'),
+ (select count(*) from public.inventory_transfer_events where transfer_id='$res_c_transfer'::uuid and action='inventory.transfer_receive'),
+ (select count(*) from public.inventory_transfer_events where transfer_id='$res_c_transfer'::uuid and action='inventory.transfer_reject'),
+ (select count(*) from public.audit_events where entity_type='inventory_transfer' and entity_id='$res_c_transfer'::uuid and action='inventory.transfer_receive'),
+ (select count(*) from public.audit_events where entity_type='inventory_transfer' and entity_id='$res_c_transfer'::uuid and action='inventory.transfer_reject'),
+ (select count(*) from public.inventory_transfer_receipt_destinations rd join public.inventory_transfer_operations op on op.id=rd.operation_id where op.transfer_id='$res_c_transfer'::uuid and op.operation_type='receive'),
+ (select coalesce(sum(rd.quantity_base),0) from public.inventory_transfer_receipt_destinations rd join public.inventory_transfer_operations op on op.id=rd.operation_id where op.transfer_id='$res_c_transfer'::uuid and op.operation_type='receive'),
+ (select count(*) from public.inventory_transfer_receipt_destinations rd join public.inventory_transfer_operations op on op.id=rd.operation_id where op.transfer_id='$res_c_transfer'::uuid and op.operation_type='receive' and rd.destination_location_id='$destination'::uuid and (rd.destination_location_id,rd.inventory_item_profile_id,rd.batch_id,rd.recording_channel,rd.quantity_base) is not distinct from (op.destination_location_id,op.inventory_item_profile_id,op.batch_id,op.recording_channel,op.quantity_base)),
+ (select count(*) from public.inventory_transfer_receipt_destinations rd join public.inventory_transfer_operations op on op.id=rd.operation_id where op.transfer_id='$res_c_transfer'::uuid and op.operation_type='receive' and (rd.destination_location_id,rd.inventory_item_profile_id,rd.batch_id,rd.recording_channel,rd.quantity_base) is distinct from (op.destination_location_id,op.inventory_item_profile_id,op.batch_id,op.recording_channel,op.quantity_base)),
+ (select count(*) from public.inventory_ledger_entries le join public.inventory_transactions tx on tx.id=le.transaction_id join public.inventory_commands c on c.id=tx.command_id where c.requester_id='$user_id'::uuid and c.idempotency_key='resolution-c-receive' and le.account_type='physical'),
+ (select count(*) from public.inventory_ledger_entries le join public.inventory_transactions tx on tx.id=le.transaction_id join public.inventory_commands c on c.id=tx.command_id where c.requester_id='$user_id'::uuid and c.idempotency_key='resolution-c-reject' and le.account_type='physical'),
+ (select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id=(select transit_location_id from public.inventory_transfers where id='$res_c_transfer'::uuid) and batch_id='$res_c_batch'::uuid and recording_channel='system' and disposition='transit'),
+ (select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id='$destination'::uuid and batch_id='$res_c_batch'::uuid and recording_channel='system' and disposition='available'),
+ (select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id=(select transit_location_id from public.inventory_transfers where id='$res_c_transfer'::uuid) and batch_id='$res_c_batch'::uuid and recording_channel='system' and disposition='returns_hold');
+SQL
+)"
+if [[ "$res_c_receive_posted" == 1 ]]; then
+  [[ "$res_c_reject_posted" == 0 && "$res_c_receive_commands" == 1 && "$res_c_reject_commands" == 0 && "$res_c_receive_ops" == 1 && "$res_c_reject_ops" == 0 && "$res_c_receive_tx" == 1 && "$res_c_reject_tx" == 0 && "$res_c_receive_event" == 1 && "$res_c_reject_event" == 0 && "$res_c_receive_audit" == 1 && "$res_c_reject_audit" == 0 && "$res_c_receipt_children" == 1 && "$res_c_receipt_correct_grain" == 1 && "$res_c_receipt_wrong_grain" == 0 && "$res_c_receive_ledger" == 2 && "$res_c_reject_ledger" == 0 && "$(psql "$local_db_url" -qAtc "select $res_c_receive_qty=7 and $res_c_reject_qty=0 and $res_c_receipt_qty=7 and $res_c_transit=3 and $res_c_destination=7 and $res_c_returns=0")" == t ]] || { echo "FAIL: over-resolution receive winner effects are incomplete" >&2; exit 1; }
+else
+  [[ "$res_c_reject_posted" == 1 && "$res_c_receive_posted" == 0 && "$res_c_reject_commands" == 1 && "$res_c_receive_commands" == 0 && "$res_c_reject_ops" == 1 && "$res_c_receive_ops" == 0 && "$res_c_reject_tx" == 1 && "$res_c_receive_tx" == 0 && "$res_c_reject_event" == 1 && "$res_c_receive_event" == 0 && "$res_c_reject_audit" == 1 && "$res_c_receive_audit" == 0 && "$res_c_receipt_children" == 0 && "$res_c_receipt_correct_grain" == 0 && "$res_c_receipt_wrong_grain" == 0 && "$res_c_reject_ledger" == 2 && "$res_c_receive_ledger" == 0 && "$(psql "$local_db_url" -qAtc "select $res_c_reject_qty=7 and $res_c_receive_qty=0 and $res_c_receipt_qty=0 and $res_c_transit=3 and $res_c_destination=0 and $res_c_returns=7")" == t ]] || { echo "FAIL: over-resolution reject winner effects are incomplete" >&2; exit 1; }
+fi
+assert_transfer_reconciles "$res_c_transfer"
+echo "PASS: resolution over-bound receive versus reject -> one seven-unit winner only"
+
+# Resolution D: exact duplicate reject replays one physical reclassification.
+make_issued_resolution_transfer resolution-d 10
+res_d_transfer="$scenario_transfer"; res_d_allocation="$scenario_allocation"; res_d_batch="$scenario_batch_id"
+run_pair resolution_duplicate_reject "$auth_sql" "$(resolution_sql reject "$res_d_transfer" "$res_d_allocation" 10 resolution-d-reject resolution-d-reject-hash-0001)" "$auth_sql" "$(resolution_sql reject "$res_d_transfer" "$res_d_allocation" 10 resolution-d-reject resolution-d-reject-hash-0001)"
+[[ "$pair_left_status" == 0 && "$pair_right_status" == 0 ]] || { echo "FAIL: duplicate reject did not replay to both callers" >&2; exit 1; }
+read -r res_d_cmd res_d_op res_d_tx res_d_event res_d_audit res_d_transit res_d_returns <<<"$(psql "$local_db_url" -qAtF ' ' -c "select (select count(*) from public.inventory_commands where requester_id='$user_id'::uuid and idempotency_key='resolution-d-reject' and status='posted'),(select count(*) from public.inventory_transfer_operations where transfer_id='$res_d_transfer'::uuid and operation_type='reject'),0,(select count(*) from public.inventory_transfer_events where transfer_id='$res_d_transfer'::uuid and action='inventory.transfer_reject'),(select count(*) from public.audit_events where entity_type='inventory_transfer' and entity_id='$res_d_transfer'::uuid and action='inventory.transfer_reject'),(select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id=(select transit_location_id from public.inventory_transfers where id='$res_d_transfer'::uuid) and batch_id='$res_d_batch'::uuid and disposition='transit'),(select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id=(select transit_location_id from public.inventory_transfers where id='$res_d_transfer'::uuid) and batch_id='$res_d_batch'::uuid and disposition='returns_hold')")"
+res_d_tx="$(resolution_command_transaction_count resolution-d-reject)"
+[[ "$res_d_cmd" == 1 && "$res_d_op" == 1 && "$res_d_tx" == 1 && "$res_d_event" == 1 && "$res_d_audit" == 1 && "$(psql "$local_db_url" -qAtc "select $res_d_transit=0 and $res_d_returns=10")" == t ]] || { echo "FAIL: duplicate reject duplicated a physical effect" >&2; exit 1; }
+assert_transfer_reconciles "$res_d_transfer"
+echo "PASS: resolution duplicate reject replay -> one reject operation and transaction"
+
+# Resolution E/F: return and disposal each replay once from real rejected stock.
+make_rejected_resolution_transfer resolution-e 10
+res_e_transfer="$scenario_transfer"; res_e_allocation="$scenario_allocation"; res_e_batch="$scenario_batch_id"
+run_pair resolution_duplicate_return "$auth_sql" "$(resolution_sql return "$res_e_transfer" "$res_e_allocation" 10 resolution-e-return resolution-e-return-hash-0001)" "$auth_sql" "$(resolution_sql return "$res_e_transfer" "$res_e_allocation" 10 resolution-e-return resolution-e-return-hash-0001)"
+[[ "$pair_left_status" == 0 && "$pair_right_status" == 0 ]] || { echo "FAIL: duplicate return did not replay to both callers" >&2; exit 1; }
+read -r res_e_cmd res_e_op res_e_tx res_e_event res_e_audit res_e_source res_e_returns <<<"$(psql "$local_db_url" -qAtF ' ' -c "select (select count(*) from public.inventory_commands where requester_id='$user_id'::uuid and idempotency_key='resolution-e-return' and status='posted'),(select count(*) from public.inventory_transfer_operations where transfer_id='$res_e_transfer'::uuid and operation_type='return'),(select count(*) from public.inventory_transactions tx join public.inventory_commands c on c.id=tx.command_id where c.idempotency_key='resolution-e-return'),(select count(*) from public.inventory_transfer_events where transfer_id='$res_e_transfer'::uuid and action='inventory.transfer_return'),(select count(*) from public.audit_events where entity_type='inventory_transfer' and entity_id='$res_e_transfer'::uuid and action='inventory.transfer_return'),(select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id='$source'::uuid and batch_id='$res_e_batch'::uuid and disposition='available'),(select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id=(select transit_location_id from public.inventory_transfers where id='$res_e_transfer'::uuid) and batch_id='$res_e_batch'::uuid and disposition='returns_hold')")"
+res_e_tx="$(resolution_command_transaction_count resolution-e-return)"
+[[ "$res_e_cmd" == 1 && "$res_e_op" == 1 && "$res_e_tx" == 1 && "$res_e_event" == 1 && "$res_e_audit" == 1 && "$(psql "$local_db_url" -qAtc "select $res_e_source=10 and $res_e_returns=0")" == t ]] || { echo "FAIL: duplicate return duplicated a physical effect" >&2; exit 1; }
+assert_transfer_reconciles "$res_e_transfer"
+echo "PASS: resolution duplicate return replay -> one return operation and transaction"
+
+make_rejected_resolution_transfer resolution-f 10
+res_f_transfer="$scenario_transfer"; res_f_allocation="$scenario_allocation"; res_f_batch="$scenario_batch_id"
+run_pair resolution_duplicate_dispose "$auth_sql" "$(resolution_sql dispose "$res_f_transfer" "$res_f_allocation" 10 resolution-f-dispose resolution-f-dispose-hash-0001)" "$auth_sql" "$(resolution_sql dispose "$res_f_transfer" "$res_f_allocation" 10 resolution-f-dispose resolution-f-dispose-hash-0001)"
+[[ "$pair_left_status" == 0 && "$pair_right_status" == 0 ]] || { echo "FAIL: duplicate dispose did not replay to both callers" >&2; exit 1; }
+read -r res_f_cmd res_f_op res_f_tx res_f_event res_f_audit res_f_returns res_f_quarantine <<<"$(psql "$local_db_url" -qAtF ' ' -c "select (select count(*) from public.inventory_commands where requester_id='$user_id'::uuid and idempotency_key='resolution-f-dispose' and status='posted'),(select count(*) from public.inventory_transfer_operations where transfer_id='$res_f_transfer'::uuid and operation_type='dispose_rejected'),(select count(*) from public.inventory_transactions tx join public.inventory_commands c on c.id=tx.command_id where c.idempotency_key='resolution-f-dispose'),(select count(*) from public.inventory_transfer_events where transfer_id='$res_f_transfer'::uuid and action='inventory.transfer_dispose_rejected'),(select count(*) from public.audit_events where entity_type='inventory_transfer' and entity_id='$res_f_transfer'::uuid and action='inventory.transfer_dispose_rejected'),(select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id=(select transit_location_id from public.inventory_transfers where id='$res_f_transfer'::uuid) and batch_id='$res_f_batch'::uuid and disposition='returns_hold'),(select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id=(select transit_location_id from public.inventory_transfers where id='$res_f_transfer'::uuid) and batch_id='$res_f_batch'::uuid and disposition='quarantine')")"
+res_f_tx="$(resolution_command_transaction_count resolution-f-dispose)"
+[[ "$res_f_cmd" == 1 && "$res_f_op" == 1 && "$res_f_tx" == 1 && "$res_f_event" == 1 && "$res_f_audit" == 1 && "$(psql "$local_db_url" -qAtc "select $res_f_returns=0 and $res_f_quarantine=10")" == t ]] || { echo "FAIL: duplicate disposal duplicated a physical effect" >&2; exit 1; }
+assert_transfer_reconciles "$res_f_transfer"
+echo "PASS: resolution duplicate dispose replay -> one disposal operation and transaction"
+
+# Resolution G/H: rejected stock is consumed once when full requests conflict,
+# and can be split when the partial quantities are jointly valid.
+make_rejected_resolution_transfer resolution-g 10
+res_g_transfer="$scenario_transfer"; res_g_allocation="$scenario_allocation"; res_g_batch="$scenario_batch_id"
+run_pair resolution_return_dispose "$auth_sql" "$(resolution_sql return "$res_g_transfer" "$res_g_allocation" 10 resolution-g-return resolution-g-return-hash-0001)" "$auth_sql" "$(resolution_sql dispose "$res_g_transfer" "$res_g_allocation" 10 resolution-g-dispose resolution-g-dispose-hash-0001)"
+assert_pair_one_winner resolution_return_dispose
+assert_worker_error resolution_return_dispose 'Inventory transfer resolution exceeds outstanding quantity'
+read -r res_g_return_cmd res_g_dispose_cmd res_g_return_op res_g_dispose_op res_g_txs res_g_events res_g_audits res_g_source res_g_quarantine res_g_returns <<<"$(psql "$local_db_url" -qAtF ' ' -c "select (select count(*) from public.inventory_commands where requester_id='$user_id'::uuid and idempotency_key='resolution-g-return' and status='posted'),(select count(*) from public.inventory_commands where requester_id='$user_id'::uuid and idempotency_key='resolution-g-dispose' and status='posted'),(select count(*) from public.inventory_transfer_operations where transfer_id='$res_g_transfer'::uuid and operation_type='return'),(select count(*) from public.inventory_transfer_operations where transfer_id='$res_g_transfer'::uuid and operation_type='dispose_rejected'),(select count(*) from public.inventory_transactions tx join public.inventory_commands c on c.id=tx.command_id where c.idempotency_key in ('resolution-g-return','resolution-g-dispose')),(select count(*) from public.inventory_transfer_events where transfer_id='$res_g_transfer'::uuid and action in ('inventory.transfer_return','inventory.transfer_dispose_rejected')),(select count(*) from public.audit_events where entity_type='inventory_transfer' and entity_id='$res_g_transfer'::uuid and action in ('inventory.transfer_return','inventory.transfer_dispose_rejected')),(select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id='$source'::uuid and batch_id='$res_g_batch'::uuid and disposition='available'),(select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id=(select transit_location_id from public.inventory_transfers where id='$res_g_transfer'::uuid) and batch_id='$res_g_batch'::uuid and disposition='quarantine'),(select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id=(select transit_location_id from public.inventory_transfers where id='$res_g_transfer'::uuid) and batch_id='$res_g_batch'::uuid and disposition='returns_hold')")"
+res_g_txs="$(resolution_command_transaction_count_for_keys resolution-g-return resolution-g-dispose)"
+[[ "$(psql "$local_db_url" -qAtc "select ($res_g_return_cmd+$res_g_dispose_cmd)=1 and ($res_g_return_op+$res_g_dispose_op)=1 and $res_g_txs=1 and $res_g_events=1 and $res_g_audits=1 and $res_g_returns=0 and (($res_g_source=10 and $res_g_quarantine=0) or ($res_g_source=0 and $res_g_quarantine=10))")" == t ]] || { echo "FAIL: return/dispose conflict produced a mixed state" >&2; exit 1; }
+assert_transfer_reconciles "$res_g_transfer"
+echo "PASS: resolution return versus dispose -> exactly one rejected-stock consumer"
+
+make_rejected_resolution_transfer resolution-h 10
+res_h_transfer="$scenario_transfer"; res_h_allocation="$scenario_allocation"; res_h_batch="$scenario_batch_id"
+run_pair resolution_partial_return_dispose "$auth_sql" "$(resolution_sql return "$res_h_transfer" "$res_h_allocation" 4 resolution-h-return resolution-h-return-hash-0001)" "$auth_sql" "$(resolution_sql dispose "$res_h_transfer" "$res_h_allocation" 6 resolution-h-dispose resolution-h-dispose-hash-0001)"
+[[ "$pair_left_status" == 0 && "$pair_right_status" == 0 ]] || { echo "FAIL: jointly valid return/dispose did not post both commands" >&2; exit 1; }
+read -r res_h_cmds res_h_ops res_h_txs res_h_events res_h_audits res_h_source res_h_quarantine res_h_returns <<<"$(psql "$local_db_url" -qAtF ' ' -c "select (select count(*) from public.inventory_commands where requester_id='$user_id'::uuid and idempotency_key in ('resolution-h-return','resolution-h-dispose') and status='posted'),(select count(*) from public.inventory_transfer_operations where transfer_id='$res_h_transfer'::uuid and operation_type in ('return','dispose_rejected')),(select count(*) from public.inventory_transactions tx join public.inventory_commands c on c.id=tx.command_id where c.idempotency_key in ('resolution-h-return','resolution-h-dispose')),(select count(*) from public.inventory_transfer_events where transfer_id='$res_h_transfer'::uuid and action in ('inventory.transfer_return','inventory.transfer_dispose_rejected')),(select count(*) from public.audit_events where entity_type='inventory_transfer' and entity_id='$res_h_transfer'::uuid and action in ('inventory.transfer_return','inventory.transfer_dispose_rejected')),(select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id='$source'::uuid and batch_id='$res_h_batch'::uuid and disposition='available'),(select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id=(select transit_location_id from public.inventory_transfers where id='$res_h_transfer'::uuid) and batch_id='$res_h_batch'::uuid and disposition='quarantine'),(select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id=(select transit_location_id from public.inventory_transfers where id='$res_h_transfer'::uuid) and batch_id='$res_h_batch'::uuid and disposition='returns_hold')")"
+res_h_txs="$(resolution_command_transaction_count_for_keys resolution-h-return resolution-h-dispose)"
+[[ "$res_h_cmds" == 2 && "$res_h_ops" == 2 && "$res_h_txs" == 2 && "$res_h_events" == 2 && "$res_h_audits" == 2 && "$(psql "$local_db_url" -qAtc "select $res_h_source=4 and $res_h_quarantine=6 and $res_h_returns=0")" == t ]] || { echo "FAIL: partial return/dispose did not preserve exact rejected quantities" >&2; exit 1; }
+assert_transfer_reconciles "$res_h_transfer"
+echo "PASS: resolution partial return plus dispose -> 4 returned, 6 quarantined"
+
+# Resolution J: two issued allocations are received in opposite caller JSON
+# orders.  Both commands are jointly valid and must lock the shared graph in
+# the database's canonical order, not the caller's array order.
+scenario_batch resolution-j-a 10 "$profile"
+res_j_batch_a="$scenario_batch_id"
+scenario_batch resolution-j-b 10 "$profile_two"
+res_j_batch_b="$scenario_batch_id"
+res_j_transfer="$(psql "$local_db_url" -qAtv ON_ERROR_STOP=1 <<SQL | tail -n 1
+begin; $auth_sql
+select public.create_inventory_transfer('$t'::uuid,'$o'::uuid,'$f'::uuid,'$source'::uuid,'$destination'::uuid,
+  jsonb_build_array(
+    jsonb_build_object('profile_id','$profile','batch_id','$res_j_batch_a','quantity_base',5,'channel','system'),
+    jsonb_build_object('profile_id','$profile_two','batch_id','$res_j_batch_b','quantity_base',5,'channel','system')
+  ),'resolution-j-create','resolution-j-create-hash-0001','multi-allocation resolution fixture');
+commit;
+SQL
+)"
+res_j_allocation_a="$(psql "$local_db_url" -qAtc "select a.id from public.inventory_transfer_allocations a where a.batch_id='$res_j_batch_a'::uuid")"
+res_j_allocation_b="$(psql "$local_db_url" -qAtc "select a.id from public.inventory_transfer_allocations a where a.batch_id='$res_j_batch_b'::uuid")"
+psql "$local_db_url" -qv ON_ERROR_STOP=1 <<SQL >/dev/null
+begin; $auth_sql
+select public.reserve_inventory_transfer('$res_j_transfer'::uuid,now()+interval '1 hour','resolution-j-reserve','resolution-j-reserve-hash-0001');
+select public.issue_inventory_transfer('$res_j_transfer'::uuid,jsonb_build_array(
+  jsonb_build_object('transfer_allocation_id','$res_j_allocation_a','quantity_base',5),
+  jsonb_build_object('transfer_allocation_id','$res_j_allocation_b','quantity_base',5)
+),'resolution-j-issue','resolution-j-issue-hash-0001','multi-allocation resolution issue');
+commit;
+SQL
+assert_transfer_reconciles "$res_j_transfer"
+resolution_j_moves_a="jsonb_build_array(jsonb_build_object('transfer_allocation_id','$res_j_allocation_a','quantity_base',2,'destination_location_id','$destination','destination_disposition','available'),jsonb_build_object('transfer_allocation_id','$res_j_allocation_b','quantity_base',2,'destination_location_id','$destination','destination_disposition','available'))"
+resolution_j_moves_b="jsonb_build_array(jsonb_build_object('transfer_allocation_id','$res_j_allocation_b','quantity_base',2,'destination_location_id','$destination','destination_disposition','available'),jsonb_build_object('transfer_allocation_id','$res_j_allocation_a','quantity_base',2,'destination_location_id','$destination','destination_disposition','available'))"
+run_pair resolution_multi_allocation_order "$auth_sql" "select public.receive_inventory_transfer('$res_j_transfer'::uuid,$resolution_j_moves_a,'resolution-j-receive-a','resolution-j-receive-a-hash-0001','multi-order receive');" "$auth_sql" "select public.receive_inventory_transfer('$res_j_transfer'::uuid,$resolution_j_moves_b,'resolution-j-receive-b','resolution-j-receive-b-hash-0001','multi-order receive');"
+[[ "$pair_left_status" == 0 && "$pair_right_status" == 0 ]] || { echo "FAIL: opposite-order multi-allocation receives did not both succeed" >&2; exit 1; }
+read -r res_j_commands res_j_ops res_j_txs res_j_events res_j_audits res_j_children res_j_orphan_children res_j_cross_grain res_j_a_received res_j_b_received res_j_a_transit res_j_b_transit res_j_a_destination res_j_b_destination <<<"$(psql "$local_db_url" -qAtF ' ' <<SQL
+select
+ (select count(*) from public.inventory_commands where requester_id='$user_id'::uuid and idempotency_key in ('resolution-j-receive-a','resolution-j-receive-b') and status='posted'),
+ (select count(*) from public.inventory_transfer_operations where transfer_id='$res_j_transfer'::uuid and operation_type='receive'),
+ (select count(*) from public.inventory_transactions tx join public.inventory_commands c on c.id=tx.command_id where c.idempotency_key in ('resolution-j-receive-a','resolution-j-receive-b')),
+ (select count(*) from public.inventory_transfer_events where transfer_id='$res_j_transfer'::uuid and action='inventory.transfer_receive'),
+ (select count(*) from public.audit_events where entity_type='inventory_transfer' and entity_id='$res_j_transfer'::uuid and action='inventory.transfer_receive'),
+ (select count(*) from public.inventory_transfer_receipt_destinations rd join public.inventory_transfer_operations op on op.id=rd.operation_id where op.transfer_id='$res_j_transfer'::uuid),
+ (select count(*) from public.inventory_transfer_receipt_destinations rd left join public.inventory_transfer_operations op on op.id=rd.operation_id where op.id is null),
+ (select count(*) from public.inventory_transfer_receipt_destinations rd join public.inventory_transfer_operations op on op.id=rd.operation_id where op.transfer_id='$res_j_transfer'::uuid and (rd.inventory_item_profile_id,rd.batch_id,rd.recording_channel,rd.destination_location_id,rd.quantity_base) is distinct from (op.inventory_item_profile_id,op.batch_id,op.recording_channel,op.destination_location_id,op.quantity_base)),
+ (select coalesce(sum(quantity_base),0) from public.inventory_transfer_operations where transfer_allocation_id='$res_j_allocation_a'::uuid and operation_type='receive'),
+ (select coalesce(sum(quantity_base),0) from public.inventory_transfer_operations where transfer_allocation_id='$res_j_allocation_b'::uuid and operation_type='receive'),
+ (select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id=(select transit_location_id from public.inventory_transfers where id='$res_j_transfer'::uuid) and batch_id='$res_j_batch_a'::uuid and disposition='transit'),
+ (select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id=(select transit_location_id from public.inventory_transfers where id='$res_j_transfer'::uuid) and batch_id='$res_j_batch_b'::uuid and disposition='transit'),
+ (select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id='$destination'::uuid and batch_id='$res_j_batch_a'::uuid and disposition='available'),
+ (select coalesce(sum(quantity_base),0) from public.inventory_balance_projections where location_id='$destination'::uuid and batch_id='$res_j_batch_b'::uuid and disposition='available');
+SQL
+)"
+res_j_txs="$(resolution_command_transaction_count_for_keys resolution-j-receive-a resolution-j-receive-b)"
+[[ "$res_j_commands" == 2 && "$res_j_ops" == 4 && "$res_j_txs" == 2 && "$res_j_events" == 4 && "$res_j_audits" == 4 && "$res_j_children" == 4 && "$res_j_orphan_children" == 0 && "$res_j_cross_grain" == 0 && "$(psql "$local_db_url" -qAtc "select $res_j_a_received=4 and $res_j_b_received=4 and $res_j_a_transit=1 and $res_j_b_transit=1 and $res_j_a_destination=4 and $res_j_b_destination=4")" == t ]] || { echo "FAIL: opposite-order multi-allocation resolution effects are incomplete or crossed" >&2; exit 1; }
+assert_transfer_reconciles "$res_j_transfer"
+echo "PASS: resolution multi-allocation opposite order -> deterministic locks, four correct receipt children"
 
 # Competing reservation sessions use different transfers and keys against the same 90-unit source balance.
 transfer_a="$(create_transfer reserve-a 60)"; transfer_b="$(create_transfer reserve-b 60)"
@@ -695,4 +969,4 @@ reconciliation="$(psql "$local_db_url" -qAtc "select count(*) from (select bp.lo
 # grain used by this harness must reconcile with the immutable ledger.
 [[ "$reconciliation" == 0 ]] || { echo "FAIL: unexpected projection reconciliation result=$reconciliation" >&2; exit 1; }
 echo "PASS: ledger/projection reconciliation -> all fixture and Phase Two physical grains reconcile"
-echo "PASS: full transfer concurrency matrix (create duplicate/reordered/conflict/different-key/invalid/authorization/large-atomicity; duplicate issue, duplicate receipt, competing reservations, cancel/issue, close/issue, expiry/cancel, expiry/close, expiry/issue, duplicate cancel, duplicate close, two expiry workers)"
+echo "PASS: full transfer concurrency matrix (create duplicate/reordered/conflict/different-key/invalid/authorization/large-atomicity; duplicate issue/receipt; resolution receive/reject, partial/over-bound, duplicate reject/return/dispose, return/dispose, multi-allocation order; competing reservations, cancel/issue, close/issue, expiry/cancel, expiry/close, expiry/issue, duplicate cancel, duplicate close, two expiry workers)"
