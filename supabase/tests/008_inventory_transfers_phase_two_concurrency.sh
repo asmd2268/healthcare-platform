@@ -16,6 +16,7 @@ matrix_application_prefix="inventory-transfer-matrix-${matrix_run_id}"
 active_pids=()
 cleanup_done=0
 barrier_fd_open=0
+identity_barrier_fd_open=0
 
 register_pid() { active_pids+=("$1"); }
 unregister_pid() {
@@ -36,6 +37,7 @@ cleanup() {
   (( cleanup_done == 0 )) || return 0
   cleanup_done=1
   if (( barrier_fd_open == 1 )); then exec 3>&- || true; barrier_fd_open=0; fi
+  if (( identity_barrier_fd_open == 1 )); then exec 4>&- || true; identity_barrier_fd_open=0; fi
   terminate_matrix_backends
   for pid in "${active_pids[@]:-}"; do [[ -z "$pid" ]] || kill "$pid" 2>/dev/null || true; done
   for pid in "${active_pids[@]:-}"; do [[ -z "$pid" ]] || wait "$pid" 2>/dev/null || true; done
@@ -44,7 +46,7 @@ cleanup() {
 }
 trap cleanup EXIT
 trap 'cleanup; exit 1' INT TERM
-t="$(uuid)"; o="$(uuid)"; f="$(uuid)"; d="$(uuid)"; user_id="$(uuid)"; unauthorized_id="$(uuid)"; approver_id="$(uuid)"; expiry_actor_id="f1000000-0000-0000-0000-000000000001"; role_id="$(uuid)"; approver_role_id="$(uuid)"; catalog="$(uuid)"; profile="$(uuid)"; unit="$(uuid)"; catalog_two="$(uuid)"; profile_two="$(uuid)"; unit_two="$(uuid)"; catalog_three="$(uuid)"; profile_three="$(uuid)"; unit_three="$(uuid)"; catalog_four="$(uuid)"; profile_four="$(uuid)"; unit_four="$(uuid)"; source="$(uuid)"; destination="$(uuid)"; batch="$(uuid)"; batch_two="$(uuid)"; batch_three="$(uuid)"; batch_four="$(uuid)"
+t="$(uuid)"; o="$(uuid)"; f="$(uuid)"; d="$(uuid)"; user_id="$(uuid)"; unauthorized_id="$(uuid)"; approver_id="$(uuid)"; expiry_actor_id="f1000000-0000-0000-0000-000000000001"; expiry_automation_identity_id="$(uuid)"; automation_race_actor_id="$(uuid)"; role_id="$(uuid)"; approver_role_id="$(uuid)"; catalog="$(uuid)"; profile="$(uuid)"; unit="$(uuid)"; catalog_two="$(uuid)"; profile_two="$(uuid)"; unit_two="$(uuid)"; catalog_three="$(uuid)"; profile_three="$(uuid)"; unit_three="$(uuid)"; catalog_four="$(uuid)"; profile_four="$(uuid)"; unit_four="$(uuid)"; source="$(uuid)"; destination="$(uuid)"; batch="$(uuid)"; batch_two="$(uuid)"; batch_three="$(uuid)"; batch_four="$(uuid)"
 
 psql "$local_db_url" -qv ON_ERROR_STOP=1 <<SQL
 insert into public.tenants(id,key,name_en) values('$t','transfer-con-${t:0:8}','Transfer concurrency');
@@ -55,15 +57,18 @@ insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_co
 ('$user_id','00000000-0000-0000-0000-000000000000','authenticated','authenticated','${user_id}@test','not-used',now(),'{}','{}',now(),now()),
 ('$unauthorized_id','00000000-0000-0000-0000-000000000000','authenticated','authenticated','${unauthorized_id}@test','not-used',now(),'{}','{}',now(),now()),
 ('$approver_id','00000000-0000-0000-0000-000000000000','authenticated','authenticated','${approver_id}@test','not-used',now(),'{}','{}',now(),now()),
-('$expiry_actor_id','00000000-0000-0000-0000-000000000000','authenticated','authenticated','expiry-worker@transfer-concurrency.test','not-used',now(),'{}','{}',now(),now())
+('$expiry_actor_id','00000000-0000-0000-0000-000000000000','authenticated','authenticated','expiry-worker@transfer-concurrency.test','not-used',now(),'{}','{}',now(),now()),
+('$automation_race_actor_id','00000000-0000-0000-0000-000000000000','authenticated','authenticated','automation-race-${automation_race_actor_id}@test','not-used',now(),'{}','{}',now(),now())
 on conflict (id) do nothing;
-insert into public.memberships(user_id,tenant_id,organization_id,facility_id,active) values('$user_id','$t','$o','$f',true),('$unauthorized_id','$t','$o','$f',true),('$approver_id','$t','$o','$f',true),('$expiry_actor_id','$t','$o','$f',true) on conflict do nothing;
+insert into public.memberships(user_id,tenant_id,organization_id,facility_id,active) values('$user_id','$t','$o','$f',true),('$unauthorized_id','$t','$o','$f',true),('$approver_id','$t','$o','$f',true) on conflict do nothing;
 insert into public.roles(id,key,name_ar,name_en,scope_level) values
 ('$role_id','transfer_con_${t:0:8}','اختبار','Transfer concurrency','facility'),
 ('$approver_role_id','transfer_con_approve_${t:0:8}','اعتماد اختبار','Transfer concurrency approver','facility');
-insert into public.role_permissions(role_id,permission_id) select '$role_id'::uuid,id from public.permissions where key in ('inventory.manage_locations','inventory.view','inventory.post_opening','inventory.transfer.view','inventory.transfer.create','inventory.transfer.reserve','inventory.transfer.issue','inventory.transfer.receive','inventory.transfer.reject','inventory.transfer.return','inventory.transfer.dispose','inventory.transfer.cancel','inventory.transfer.close_remainder');
+insert into public.role_permissions(role_id,permission_id) select '$role_id'::uuid,id from public.permissions where key in ('platform.manage_roles','inventory.manage_locations','inventory.view','inventory.post_opening','inventory.transfer.view','inventory.transfer.create','inventory.transfer.reserve','inventory.transfer.issue','inventory.transfer.receive','inventory.transfer.reject','inventory.transfer.return','inventory.transfer.dispose','inventory.transfer.cancel','inventory.transfer.close_remainder');
 insert into public.role_permissions(role_id,permission_id) select '$approver_role_id'::uuid,id from public.permissions where key in ('inventory.approve_opening','inventory.view');
-insert into public.user_role_assignments(user_id,role_id,tenant_id,organization_id,facility_id) values('$user_id','$role_id','$t','$o','$f'),('$expiry_actor_id','$role_id','$t','$o','$f'),('$approver_id','$approver_role_id','$t','$o','$f');
+insert into public.user_role_assignments(user_id,role_id,tenant_id,organization_id,facility_id) values('$user_id','$role_id','$t','$o','$f'),('$approver_id','$approver_role_id','$t','$o','$f');
+insert into public.automation_identities(id,principal_id,tenant_id,organization_id,facility_id,purpose,display_name,created_by)
+values('$expiry_automation_identity_id','$expiry_actor_id','$t','$o','$f','inventory.reservation_expiry','Inventory reservation expiry matrix worker','$user_id');
 insert into public.catalog_items(id,item_name_en,created_by,updated_by) values('$catalog','Transfer concurrency item','$user_id','$user_id');
 insert into public.inventory_units(id,code,name_en,created_by) values('$unit','TRC-${t:0:6}','Unit','$user_id');
 insert into public.inventory_item_profiles(id,tenant_id,organization_id,facility_id,catalog_item_id,created_by,updated_by) values('$profile','$t','$o','$f','$catalog','$user_id','$user_id');
@@ -266,6 +271,57 @@ SQL
   pair_right_status="$(<"$tmp_dir/${name}_right.status")"
   assert_no_unhandled_db_error "$name"
 }
+
+assert_automation_identity_deactivation_serializes() {
+  local fifo="$tmp_dir/automation-identity-deactivation.fifo" holder_pid deactivate_pid deadline
+  mkfifo "$fifo"
+  PGAPPNAME="${matrix_application_prefix}-automation-identity-holder" psql "$local_db_url" -qAt <"$fifo" >"$tmp_dir/automation_identity_holder.log" 2>&1 &
+  holder_pid=$!
+  register_pid "$holder_pid"
+  exec 4>"$fifo"
+  identity_barrier_fd_open=1
+  printf "begin; set local role service_role; select public.require_automation_identity('%s'::uuid,'inventory.reservation_expiry','%s'::uuid,'%s'::uuid,'%s'::uuid); select 'READY';\n" "$expiry_actor_id" "$t" "$o" "$f" >&4
+  deadline=$((SECONDS + scenario_timeout_seconds))
+  while (( SECONDS < deadline )); do
+    grep -qx 'READY' "$tmp_dir/automation_identity_holder.log" 2>/dev/null && break
+    sleep 0.05
+  done
+  grep -qx 'READY' "$tmp_dir/automation_identity_holder.log" 2>/dev/null || { echo "FAIL: automation identity holder did not resolve before timeout" >&2; cleanup; exit 1; }
+  (
+    if PGAPPNAME="${matrix_application_prefix}-automation-identity-deactivate" psql "$local_db_url" -qAtv ON_ERROR_STOP=1 <<SQL >"$tmp_dir/automation_identity_deactivate.log" 2>&1
+begin; set local role service_role;
+select public.deactivate_automation_identity('$expiry_automation_identity_id'::uuid,'$user_id'::uuid,'matrix deactivation');
+commit;
+SQL
+    then echo 0 >"$tmp_dir/automation_identity_deactivate.status"; else echo $? >"$tmp_dir/automation_identity_deactivate.status"; fi
+  ) &
+  deactivate_pid=$!
+  register_pid "$deactivate_pid"
+  sleep 0.3
+  kill -0 "$deactivate_pid" 2>/dev/null || { cat "$tmp_dir/automation_identity_deactivate.log" >&2; echo "FAIL: automation identity deactivation did not wait for an active resolver" >&2; cleanup; exit 1; }
+  printf 'commit;\n' >&4
+  exec 4>&-
+  identity_barrier_fd_open=0
+  wait "$holder_pid" || { echo "FAIL: automation identity holder failed" >&2; cat "$tmp_dir/automation_identity_holder.log" >&2; cleanup; exit 1; }
+  unregister_pid "$holder_pid"
+  wait "$deactivate_pid" || true
+  unregister_pid "$deactivate_pid"
+  [[ "$(<"$tmp_dir/automation_identity_deactivate.status")" == 0 ]] || { cat "$tmp_dir/automation_identity_deactivate.log" >&2; echo "FAIL: automation identity deactivation failed after resolver released" >&2; exit 1; }
+  [[ "$(psql "$local_db_url" -qAtc "select (select not active from public.automation_identities where id='$expiry_automation_identity_id'::uuid) and (select count(*)=1 from public.audit_events where action='automation_identity.deactivated' and entity_id='$expiry_automation_identity_id'::uuid and actor_id='$user_id'::uuid)")" == t ]] || { echo "FAIL: automation identity deactivation did not persist one audited terminal transition" >&2; exit 1; }
+  echo "PASS: automation identity resolver versus deactivation -> deactivation waits, then audits one terminal transition"
+}
+
+# Registration and a concurrent attempt to grant ordinary membership share the
+# same profile-row lock. Exactly one may commit; an active automation identity
+# can never coexist with active interactive membership.
+run_pair automation_identity_membership_race "" \
+  "insert into public.automation_identities(principal_id,tenant_id,organization_id,facility_id,purpose,display_name,created_by) values('$automation_race_actor_id'::uuid,'$t'::uuid,'$o'::uuid,'$f'::uuid,'inventory.reservation_expiry','Automation identity race fixture','$user_id'::uuid); select pg_sleep(1);" \
+  "" \
+  "insert into public.memberships(user_id,tenant_id,organization_id,facility_id,active) values('$automation_race_actor_id'::uuid,'$t'::uuid,'$o'::uuid,'$f'::uuid,true);"
+[[ ( "$pair_left_status" == 0 && "$pair_right_status" != 0 ) || ( "$pair_left_status" != 0 && "$pair_right_status" == 0 ) ]] || { echo "FAIL: automation identity membership race did not yield one committed winner" >&2; exit 1; }
+grep -Eq 'Automation identity principal (cannot receive interactive access|is not eligible)' "$tmp_dir/automation_identity_membership_race_"*.log || { echo "FAIL: automation identity membership race did not fail closed" >&2; exit 1; }
+[[ "$(psql "$local_db_url" -qAtc "select not exists(select 1 from public.automation_identities ai join public.memberships m on m.user_id=ai.principal_id and m.active where ai.principal_id='$automation_race_actor_id'::uuid and ai.active)")" == t ]] || { echo "FAIL: active automation identity gained interactive membership" >&2; exit 1; }
+echo "PASS: automation identity registration versus membership -> one committed winner, no mixed identity state"
 
 # Transfer creation accepts a caller-supplied request hash.  The current public
 # contract compares that value for idempotency; it does not re-hash or
@@ -850,6 +906,26 @@ fi
 assert_transfer_reconciles "$close_issue_transfer"
 echo "PASS: close remainder versus issue -> issued+closed=$(( ${close_issued%.*} + ${close_closed%.*} )) within allocation and line bounds"
 
+# A service-role worker cannot substitute an ordinary, unregistered principal
+# before entering any expiry race or creating a command/adjustment effect.
+scenario_batch expiry-unregistered 20
+make_expired_transfer expiry-unregistered 10
+expiry_unregistered_transfer="$scenario_transfer"; expiry_unregistered_reservation="$scenario_reservation"
+if psql "$local_db_url" -qv ON_ERROR_STOP=1 <<SQL >"$tmp_dir/expiry_unregistered.log" 2>&1
+begin; set local role service_role;
+select public.expire_inventory_transfer_reservations('$unauthorized_id'::uuid,100);
+commit;
+SQL
+then
+  echo "FAIL: unregistered expiry actor was accepted" >&2
+  exit 1
+fi
+grep -q 'Automation identity is not registered for purpose' "$tmp_dir/expiry_unregistered.log" || { cat "$tmp_dir/expiry_unregistered.log" >&2; echo "FAIL: unregistered expiry actor did not fail closed" >&2; exit 1; }
+read -r expiry_unregistered_command expiry_unregistered_adjustment expiry_unregistered_event expiry_unregistered_remaining <<<"$(psql "$local_db_url" -qAtF ' ' -c "select (select count(*) from public.inventory_commands where requester_id='$unauthorized_id'::uuid and idempotency_key='reservation-expiry:$expiry_unregistered_reservation'),(select count(*) from public.inventory_reservation_adjustments where reservation_id='$expiry_unregistered_reservation'::uuid),(select count(*) from public.inventory_transfer_events where transfer_id='$expiry_unregistered_transfer'::uuid and action='inventory.transfer_reservation_expired'),(select public.inventory_transfer_reservation_remaining('$expiry_unregistered_reservation'::uuid))")"
+[[ "$expiry_unregistered_command" == 0 && "$expiry_unregistered_adjustment" == 0 && "$expiry_unregistered_event" == 0 && "$(psql "$local_db_url" -qAtc "select $expiry_unregistered_remaining=10")" == t ]] || { echo "FAIL: unregistered expiry actor left a partial effect" >&2; exit 1; }
+assert_transfer_reconciles "$expiry_unregistered_transfer"
+echo "PASS: unregistered expiry actor -> denied before command, adjustment, or physical effect"
+
 # Scenario C: an expiry worker and cancellation may both complete only when
 # one release is a no-op; the append-only adjustment total must remain exact.
 scenario_batch expiry-cancel 20
@@ -962,6 +1038,8 @@ SQL
 )"
 [[ "$(psql "$local_db_url" -qAtc "select ($expiry_worker_left_count+$expiry_worker_right_count)=2")" == t && "$expiry_worker_releases" == 2 && "$expiry_worker_duplicates" == 0 && "$expiry_worker_commands" == 2 && "$expiry_worker_events" == 2 && "$final_expiry_pass" == 0 ]] || { echo "FAIL: two_expiry_workers skipped or duplicated expiry work" >&2; exit 1; }
 echo "PASS: two expiry workers -> returned $expiry_worker_left_count+$expiry_worker_right_count, two candidates released once, final pass=0"
+
+assert_automation_identity_deactivation_serializes
 
 # Ledger/projection reconciliation for every physical dimension touched by this harness.
 reconciliation="$(psql "$local_db_url" -qAtc "select count(*) from (select bp.location_id,bp.inventory_item_profile_id,bp.batch_id,bp.recording_channel,bp.disposition,bp.quantity_base,coalesce(sum(le.quantity_base),0) ledger_quantity from public.inventory_balance_projections bp left join public.inventory_ledger_entries le on le.account_type='physical' and le.location_id=bp.location_id and le.inventory_item_profile_id=bp.inventory_item_profile_id and le.batch_id is not distinct from bp.batch_id and le.recording_channel=bp.recording_channel and le.disposition=bp.disposition where bp.tenant_id='$t'::uuid group by bp.id) q where q.quantity_base is distinct from q.ledger_quantity")"
