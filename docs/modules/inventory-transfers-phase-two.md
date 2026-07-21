@@ -23,6 +23,8 @@ For each still-expired positive remainder, it uses the stable `reservation-expir
 
 Automation Auth users are provisioned outside migrations without credentials in repository SQL. The registry prevents active automation principals from holding ordinary memberships or active role assignments; registration and deactivation are trusted, audited lifecycle operations. Existing schedulers that supplied a human actor must provision and register a dedicated non-interactive principal before this strict-cutover migration is deployed.
 
+The human administrator used for registration or deactivation must hold `platform.manage_roles` for the requested scope. A true global `platform_owner` assignment (global role with all assignment scope columns null) satisfies this check across tenants without a membership, matching the platform authorization contract. No other global-looking role receives that bypass; all other administrators still require an active matching membership and scoped role permission.
+
 ### Scheduler cutover
 
 The implemented scheduler boundary is the server-only Next.js route `GET /api/internal/inventory/reservation-expiry`. `apps/web/vercel.json` schedules it daily at `02:00 UTC`; deployments needing a different approved cadence may use an equivalent scheduler, but must call the same route with `Authorization: Bearer <CRON_SECRET>`. The route takes no actor parameter. It reads only the deployment-secret `INVENTORY_RESERVATION_EXPIRY_AUTOMATION_PRINCIPAL_ID`, drains up to `INVENTORY_RESERVATION_EXPIRY_MAX_BATCHES` bounded RPC batches, and returns only aggregate counts and a `drainLimitReached` signal—never identity, scope, database, or credential details on failure.

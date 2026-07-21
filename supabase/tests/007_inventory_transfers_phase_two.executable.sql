@@ -28,19 +28,49 @@ $$;
 grant execute on function public.transfer_test_assert(boolean,text),public.transfer_test_expect_failure(text,text),public.transfer_test_expect_sqlstate(text,text,text),public.transfer_test_physical_grain_mismatches(uuid,uuid,jsonb) to authenticated;
 
 do $$
-declare t uuid:='71000000-0000-0000-0000-000000000001'; o uuid:='71000000-0000-0000-0000-000000000002'; f uuid:='71000000-0000-0000-0000-000000000003'; d uuid:='71000000-0000-0000-0000-000000000004'; u uuid:='71000000-0000-0000-0000-000000000005'; approver uuid:='71000000-0000-0000-0000-000000000026'; narrow uuid:='71000000-0000-0000-0000-000000000085'; automation uuid:='71000000-0000-0000-0000-000000000140'; role_id uuid:=gen_random_uuid(); approver_role uuid:=gen_random_uuid(); narrow_role uuid:='71000000-0000-0000-0000-000000000086'; ci uuid:='71000000-0000-0000-0000-000000000006'; ip uuid:='71000000-0000-0000-0000-000000000007'; iu uuid:='71000000-0000-0000-0000-000000000008'; src uuid:='71000000-0000-0000-0000-000000000009'; dst uuid:='71000000-0000-0000-0000-000000000010'; child uuid:='71000000-0000-0000-0000-000000000011'; b uuid:='71000000-0000-0000-0000-000000000012';
+declare t uuid:='71000000-0000-0000-0000-000000000001'; o uuid:='71000000-0000-0000-0000-000000000002'; f uuid:='71000000-0000-0000-0000-000000000003'; d uuid:='71000000-0000-0000-0000-000000000004'; u uuid:='71000000-0000-0000-0000-000000000005'; approver uuid:='71000000-0000-0000-0000-000000000026'; narrow uuid:='71000000-0000-0000-0000-000000000085'; automation uuid:='71000000-0000-0000-0000-000000000140'; global_owner uuid:='71000000-0000-0000-0000-000000000141'; other_global uuid:='71000000-0000-0000-0000-000000000142'; role_id uuid:=gen_random_uuid(); approver_role uuid:=gen_random_uuid(); narrow_role uuid:='71000000-0000-0000-0000-000000000086'; other_global_role uuid:='71000000-0000-0000-0000-000000000143'; ci uuid:='71000000-0000-0000-0000-000000000006'; ip uuid:='71000000-0000-0000-0000-000000000007'; iu uuid:='71000000-0000-0000-0000-000000000008'; src uuid:='71000000-0000-0000-0000-000000000009'; dst uuid:='71000000-0000-0000-0000-000000000010'; child uuid:='71000000-0000-0000-0000-000000000011'; b uuid:='71000000-0000-0000-0000-000000000012';
 begin
  insert into public.tenants(id,key,name_en) values(t,'transfer-test','Transfer test'); insert into public.organizations(id,tenant_id,code,name_en) values(o,t,'TR','Transfer'); insert into public.facilities(id,tenant_id,organization_id,code,name_en) values(f,t,o,'TR','Transfer'); insert into public.departments(id,tenant_id,organization_id,facility_id,code,name_en) values(d,t,o,f,'TR','Transfer');
- insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at) values(u,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','transfer@test','not-used',now(),'{}','{}',now(),now()),(approver,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','opening-approver@test','not-used',now(),'{}','{}',now(),now()),(narrow,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','closure-cancel-only@test','not-used',now(),'{}','{}',now(),now()),(automation,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','inventory-expiry-automation@test','not-used',now(),'{}','{}',now(),now());
+ insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at) values(u,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','transfer@test','not-used',now(),'{}','{}',now(),now()),(approver,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','opening-approver@test','not-used',now(),'{}','{}',now(),now()),(narrow,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','closure-cancel-only@test','not-used',now(),'{}','{}',now(),now()),(automation,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','inventory-expiry-automation@test','not-used',now(),'{}','{}',now(),now()),(global_owner,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','global-owner@test','not-used',now(),'{}','{}',now(),now()),(other_global,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','other-global@test','not-used',now(),'{}','{}',now(),now());
  insert into public.memberships(user_id,tenant_id,organization_id,facility_id,active) values(u,t,o,f,true),(approver,t,o,f,true),(narrow,t,o,f,true); insert into public.roles(id,key,name_ar,name_en,scope_level) values(role_id,'transfer_test_role','اختبار','Transfer test','facility'),(approver_role,'transfer_opening_approver','اختبار اعتماد','Opening approver','facility'),(narrow_role,'transfer_closure_cancel_only','إغلاق اختبار','Closure cancel only','facility');
  insert into public.role_permissions(role_id,permission_id) select role_id,id from public.permissions where key in ('platform.manage_roles','inventory.manage_locations','inventory.view','inventory.view_ledger','inventory.post_opening','inventory.transfer.view','inventory.transfer.create','inventory.transfer.reserve','inventory.transfer.issue','inventory.transfer.receive','inventory.transfer.reject','inventory.transfer.return','inventory.transfer.dispose','inventory.transfer.cancel','inventory.transfer.close_remainder');
  insert into public.role_permissions(role_id,permission_id) select approver_role,id from public.permissions where key in ('inventory.approve_opening','inventory.view');
  insert into public.role_permissions(role_id,permission_id) select narrow_role,id from public.permissions where key in ('inventory.view','inventory.transfer.view','inventory.transfer.cancel');
  insert into public.user_role_assignments(user_id,role_id,tenant_id,organization_id,facility_id) values(u,role_id,t,o,f),(approver,approver_role,t,o,f),(narrow,narrow_role,t,o,f);
+ insert into public.roles(id,key,name_ar,name_en,scope_level) values(other_global_role,'other_global_test_role','اختبار عالمي','Other global test role','global');
+ insert into public.role_permissions(role_id,permission_id) select other_global_role,id from public.permissions where key='platform.manage_roles';
+ insert into public.user_role_assignments(user_id,role_id,tenant_id,organization_id,facility_id) values(other_global,other_global_role,null,null,null);
  insert into public.catalog_items(id,item_name_en,created_by,updated_by) values(ci,'Transfer item',u,u); insert into public.inventory_units(id,code,name_en,created_by) values(iu,'TRU','Transfer unit',u); insert into public.inventory_item_profiles(id,tenant_id,organization_id,facility_id,catalog_item_id,created_by,updated_by) values(ip,t,o,f,ci,u,u); insert into public.inventory_item_units(inventory_item_profile_id,inventory_unit_id,multiplier_to_base,is_base_unit,active,created_by,updated_by) values(ip,iu,1,true,true,u,u); update public.inventory_item_profiles set active=true where id=ip;
  insert into public.inventory_locations(id,tenant_id,organization_id,facility_id,department_id,code,name_en,location_kind,created_by,updated_by) values(src,t,o,f,d,'SRC','Source','storage',u,u),(dst,t,o,f,d,'DST','Receiving root','storage',u,u),(child,t,o,f,d,'DST-CHILD','Receiving child','storage',u,u); update public.inventory_locations set parent_location_id=dst where id=child;
  insert into public.inventory_batches(id,inventory_item_profile_id,lot_number,lot_status,expiry_date,expiry_status,created_by,updated_by) values(b,ip,'TR-LOT','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000025',ip,'TR-CLOSURE-LOT','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000065',ip,'TR-LINE-BOUND-A','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000066',ip,'TR-LINE-BOUND-B','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000077',ip,'TR-LIFECYCLE-RESERVED','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000084',ip,'TR-LIFECYCLE-COMPLETED','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000090',ip,'TR-CLOSURE-PERMISSION','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000095',ip,'TR-CLOSURE-LINE-A','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000096',ip,'TR-CLOSURE-LINE-B','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000105',ip,'TR-RESERVATION-AGGREGATE','known',current_date+30,'known_valid',u,u),('71000000-0000-0000-0000-000000000120',ip,'TR-NO-PROJECTION','known',current_date+30,'known_valid',u,u);
 end $$;
+
+select set_config('request.jwt.claim.role','service_role',true);
+select public.bootstrap_first_platform_owner(
+  '71000000-0000-0000-0000-000000000141',
+  '71000000-0000-0000-0000-000000000001'
+);
+select public.transfer_test_assert(
+  not exists(select 1 from public.memberships where user_id='71000000-0000-0000-0000-000000000141' and active)
+  and exists(
+    select 1 from public.user_role_assignments ura
+    join public.roles r on r.id=ura.role_id
+    where ura.user_id='71000000-0000-0000-0000-000000000141'
+      and ura.active and r.key='platform_owner' and r.scope_level='global'
+      and ura.tenant_id is null and ura.organization_id is null and ura.facility_id is null
+  )
+  and public.inventory_actor_has_permission(
+    '71000000-0000-0000-0000-000000000141','platform.manage_roles',
+    '71000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000002',
+    '71000000-0000-0000-0000-000000000003'
+  )
+  and not public.inventory_actor_has_permission(
+    '71000000-0000-0000-0000-000000000142','platform.manage_roles',
+    '71000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000002',
+    '71000000-0000-0000-0000-000000000003'
+  ),
+  'only a true global platform owner bypasses inventory membership scoping'
+);
 
 set local role authenticated;
 select set_config('request.jwt.claim.role','authenticated',true),set_config('request.jwt.claim.sub','71000000-0000-0000-0000-000000000005',true);
@@ -956,7 +986,7 @@ select public.register_automation_identity(
   '71000000-0000-0000-0000-000000000003',
   'inventory.reservation_expiry',
   'Inventory reservation expiry automation',
-  '71000000-0000-0000-0000-000000000005'
+  '71000000-0000-0000-0000-000000000141'
 ) as expiry_automation_identity
 \gset
 
@@ -967,8 +997,8 @@ select public.transfer_test_assert(
     '71000000-0000-0000-0000-000000000003'
   )='71000000-0000-0000-0000-000000000140'::uuid
   and (select count(*) from public.automation_identities where id=:'expiry_automation_identity'::uuid and active)=1
-  and (select count(*) from public.audit_events where entity_type='automation_identity' and entity_id=:'expiry_automation_identity'::uuid and actor_id='71000000-0000-0000-0000-000000000005' and action='automation_identity.registered')=1,
-  'registered active automation identity resolves only through trusted execution'
+  and (select count(*) from public.audit_events where entity_type='automation_identity' and entity_id=:'expiry_automation_identity'::uuid and actor_id='71000000-0000-0000-0000-000000000141' and action='automation_identity.registered')=1,
+  'global platform owner registers an active automation identity through trusted execution'
 );
 select public.transfer_test_assert(
   not has_function_privilege('authenticated','public.require_automation_identity(uuid,text,uuid,uuid,uuid)'::regprocedure,'EXECUTE')
