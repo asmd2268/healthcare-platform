@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/internal/inventory/reservation-expiry",
+      "schedule": "0 2 * * *"
+    }
+  ]
+}
