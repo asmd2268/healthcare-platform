@@ -28,12 +28,12 @@ $$;
 grant execute on function public.transfer_test_assert(boolean,text),public.transfer_test_expect_failure(text,text),public.transfer_test_expect_sqlstate(text,text,text),public.transfer_test_physical_grain_mismatches(uuid,uuid,jsonb) to authenticated;
 
 do $$
-declare t uuid:='71000000-0000-0000-0000-000000000001'; o uuid:='71000000-0000-0000-0000-000000000002'; f uuid:='71000000-0000-0000-0000-000000000003'; d uuid:='71000000-0000-0000-0000-000000000004'; u uuid:='71000000-0000-0000-0000-000000000005'; approver uuid:='71000000-0000-0000-0000-000000000026'; narrow uuid:='71000000-0000-0000-0000-000000000085'; role_id uuid:=gen_random_uuid(); approver_role uuid:=gen_random_uuid(); narrow_role uuid:='71000000-0000-0000-0000-000000000086'; ci uuid:='71000000-0000-0000-0000-000000000006'; ip uuid:='71000000-0000-0000-0000-000000000007'; iu uuid:='71000000-0000-0000-0000-000000000008'; src uuid:='71000000-0000-0000-0000-000000000009'; dst uuid:='71000000-0000-0000-0000-000000000010'; child uuid:='71000000-0000-0000-0000-000000000011'; b uuid:='71000000-0000-0000-0000-000000000012';
+declare t uuid:='71000000-0000-0000-0000-000000000001'; o uuid:='71000000-0000-0000-0000-000000000002'; f uuid:='71000000-0000-0000-0000-000000000003'; d uuid:='71000000-0000-0000-0000-000000000004'; u uuid:='71000000-0000-0000-0000-000000000005'; approver uuid:='71000000-0000-0000-0000-000000000026'; narrow uuid:='71000000-0000-0000-0000-000000000085'; automation uuid:='71000000-0000-0000-0000-000000000140'; role_id uuid:=gen_random_uuid(); approver_role uuid:=gen_random_uuid(); narrow_role uuid:='71000000-0000-0000-0000-000000000086'; ci uuid:='71000000-0000-0000-0000-000000000006'; ip uuid:='71000000-0000-0000-0000-000000000007'; iu uuid:='71000000-0000-0000-0000-000000000008'; src uuid:='71000000-0000-0000-0000-000000000009'; dst uuid:='71000000-0000-0000-0000-000000000010'; child uuid:='71000000-0000-0000-0000-000000000011'; b uuid:='71000000-0000-0000-0000-000000000012';
 begin
  insert into public.tenants(id,key,name_en) values(t,'transfer-test','Transfer test'); insert into public.organizations(id,tenant_id,code,name_en) values(o,t,'TR','Transfer'); insert into public.facilities(id,tenant_id,organization_id,code,name_en) values(f,t,o,'TR','Transfer'); insert into public.departments(id,tenant_id,organization_id,facility_id,code,name_en) values(d,t,o,f,'TR','Transfer');
- insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at) values(u,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','transfer@test','not-used',now(),'{}','{}',now(),now()),(approver,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','opening-approver@test','not-used',now(),'{}','{}',now(),now()),(narrow,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','closure-cancel-only@test','not-used',now(),'{}','{}',now(),now());
+ insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at) values(u,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','transfer@test','not-used',now(),'{}','{}',now(),now()),(approver,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','opening-approver@test','not-used',now(),'{}','{}',now(),now()),(narrow,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','closure-cancel-only@test','not-used',now(),'{}','{}',now(),now()),(automation,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','inventory-expiry-automation@test','not-used',now(),'{}','{}',now(),now());
  insert into public.memberships(user_id,tenant_id,organization_id,facility_id,active) values(u,t,o,f,true),(approver,t,o,f,true),(narrow,t,o,f,true); insert into public.roles(id,key,name_ar,name_en,scope_level) values(role_id,'transfer_test_role','اختبار','Transfer test','facility'),(approver_role,'transfer_opening_approver','اختبار اعتماد','Opening approver','facility'),(narrow_role,'transfer_closure_cancel_only','إغلاق اختبار','Closure cancel only','facility');
- insert into public.role_permissions(role_id,permission_id) select role_id,id from public.permissions where key in ('inventory.manage_locations','inventory.view','inventory.view_ledger','inventory.post_opening','inventory.transfer.view','inventory.transfer.create','inventory.transfer.reserve','inventory.transfer.issue','inventory.transfer.receive','inventory.transfer.reject','inventory.transfer.return','inventory.transfer.dispose','inventory.transfer.cancel','inventory.transfer.close_remainder');
+ insert into public.role_permissions(role_id,permission_id) select role_id,id from public.permissions where key in ('platform.manage_roles','inventory.manage_locations','inventory.view','inventory.view_ledger','inventory.post_opening','inventory.transfer.view','inventory.transfer.create','inventory.transfer.reserve','inventory.transfer.issue','inventory.transfer.receive','inventory.transfer.reject','inventory.transfer.return','inventory.transfer.dispose','inventory.transfer.cancel','inventory.transfer.close_remainder');
  insert into public.role_permissions(role_id,permission_id) select approver_role,id from public.permissions where key in ('inventory.approve_opening','inventory.view');
  insert into public.role_permissions(role_id,permission_id) select narrow_role,id from public.permissions where key in ('inventory.view','inventory.transfer.view','inventory.transfer.cancel');
  insert into public.user_role_assignments(user_id,role_id,tenant_id,organization_id,facility_id) values(u,role_id,t,o,f),(approver,approver_role,t,o,f),(narrow,narrow_role,t,o,f);
@@ -888,9 +888,10 @@ select public.transfer_test_expect_failure($$update public.inventory_reservation
 select public.transfer_test_expect_failure($$delete from public.inventory_reservations$$,'Posted inventory reservation records are append-only');
 select public.transfer_test_assert(has_table_privilege('authenticated','public.inventory_reservation_adjustments','SELECT') and not has_table_privilege('authenticated','public.inventory_reservation_adjustments','INSERT, UPDATE, DELETE') and not has_function_privilege('authenticated','public.append_inventory_reservation_adjustment(uuid,uuid,uuid,uuid,public.inventory_reservation_adjustment_type,numeric,uuid,uuid,text,jsonb)'::regprocedure,'EXECUTE') and exists(select 1 from pg_trigger t where t.tgrelid='public.inventory_reservation_adjustments'::regclass and t.tgenabled<>'D' and t.tgname='inventory_reservation_adjustments_immutable') and exists(select 1 from pg_trigger t where t.tgrelid='public.inventory_reservations'::regclass and t.tgenabled<>'D' and t.tgname='inventory_reservations_immutable'),'reservation adjustment and reservation tables are append-only and client-write denied');
 
--- Expiry is a trusted, adjustment-backed ATP release. It must preserve the
--- immutable reservation, avoid legacy and physical accounting writes, attribute
--- command/event/audit records to the supplied authorized actor, and replay once.
+-- Expiry is a trusted, adjustment-backed ATP release. The supplied actor is a
+-- registered non-interactive automation principal, not a human with an
+-- inventory permission. It must preserve immutable reservations, avoid legacy
+-- and physical accounting writes, and replay once.
 insert into public.inventory_transfers(id,tenant_id,organization_id,facility_id,source_location_id,destination_root_location_id,transit_location_id,status,created_by,updated_by)
 select '71000000-0000-0000-0000-000000000101',tenant_id,organization_id,facility_id,source_location_id,destination_root_location_id,transit_location_id,'reserved','71000000-0000-0000-0000-000000000005','71000000-0000-0000-0000-000000000005'
 from public.inventory_transfers where id=:'transfer_id'::uuid;
@@ -920,6 +921,14 @@ select public.transfer_test_expect_failure(
   $$select public.expire_inventory_transfer_reservations('71000000-0000-0000-0000-000000000005',100)$$,
   'permission denied'
 );
+select public.transfer_test_expect_failure(
+  $$select public.require_automation_identity('71000000-0000-0000-0000-000000000140','inventory.reservation_expiry','71000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000002','71000000-0000-0000-0000-000000000003')$$,
+  'permission denied'
+);
+select public.transfer_test_expect_failure(
+  $$insert into public.automation_identities(principal_id,tenant_id,organization_id,facility_id,purpose,display_name,created_by) values('71000000-0000-0000-0000-000000000140','71000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000002','71000000-0000-0000-0000-000000000003','inventory.reservation_expiry','direct','71000000-0000-0000-0000-000000000005')$$,
+  'permission denied'
+);
 reset role;
 
 select set_config('request.jwt.claim.role','service_role',true);
@@ -928,12 +937,70 @@ select public.transfer_test_expect_failure(
   'Inventory reservation expiry invocation is invalid'
 );
 select public.transfer_test_expect_failure(
-  $$select public.expire_inventory_transfer_reservations('71000000-0000-0000-0000-000000000085',100)$$,
-  'Inventory reservation expiry actor is not authorized'
+  $$select public.expire_inventory_transfer_reservations('71000000-0000-0000-0000-000000000005',100)$$,
+  'Automation identity is not registered for purpose'
+);
+select public.transfer_test_expect_failure(
+  $$select public.require_automation_identity(null,'inventory.reservation_expiry',null,null,null)$$,
+  'Automation identity invocation is invalid'
+);
+select public.transfer_test_expect_failure(
+  $$select public.require_automation_identity('71000000-0000-0000-0000-000000000140','inventory.other',null,null,null)$$,
+  'Automation identity purpose is invalid'
+);
+
+select public.register_automation_identity(
+  '71000000-0000-0000-0000-000000000140',
+  '71000000-0000-0000-0000-000000000001',
+  '71000000-0000-0000-0000-000000000002',
+  '71000000-0000-0000-0000-000000000003',
+  'inventory.reservation_expiry',
+  'Inventory reservation expiry automation',
+  '71000000-0000-0000-0000-000000000005'
+) as expiry_automation_identity
+\gset
+
+select public.transfer_test_assert(
+  public.require_automation_identity(
+    '71000000-0000-0000-0000-000000000140','inventory.reservation_expiry',
+    '71000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000002',
+    '71000000-0000-0000-0000-000000000003'
+  )='71000000-0000-0000-0000-000000000140'::uuid
+  and (select count(*) from public.automation_identities where id=:'expiry_automation_identity'::uuid and active)=1
+  and (select count(*) from public.audit_events where entity_type='automation_identity' and entity_id=:'expiry_automation_identity'::uuid and actor_id='71000000-0000-0000-0000-000000000005' and action='automation_identity.registered')=1,
+  'registered active automation identity resolves only through trusted execution'
+);
+select public.transfer_test_assert(
+  not has_function_privilege('authenticated','public.require_automation_identity(uuid,text,uuid,uuid,uuid)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('authenticated','public.register_automation_identity(uuid,uuid,uuid,uuid,text,text,uuid)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('authenticated','public.deactivate_automation_identity(uuid,uuid,text)'::regprocedure,'EXECUTE')
+  and not has_table_privilege('authenticated','public.automation_identities','SELECT, INSERT, UPDATE, DELETE')
+  and not has_table_privilege('service_role','public.automation_identities','SELECT, INSERT, UPDATE, DELETE'),
+  'automation registry has no direct client or service-role table-write path'
+);
+select public.transfer_test_expect_failure(
+  $$insert into public.memberships(user_id,tenant_id,organization_id,facility_id,active) values('71000000-0000-0000-0000-000000000140','71000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000002','71000000-0000-0000-0000-000000000003',true)$$,
+  'Automation identity principal cannot receive interactive access'
+);
+select public.transfer_test_expect_failure(
+  $$insert into public.user_role_assignments(user_id,role_id,tenant_id,organization_id,facility_id,active) select '71000000-0000-0000-0000-000000000140',role_id,tenant_id,organization_id,facility_id,true from public.user_role_assignments where user_id='71000000-0000-0000-0000-000000000005' limit 1$$,
+  'Automation identity principal cannot receive interactive access'
+);
+select public.transfer_test_expect_failure(
+  $$select public.require_automation_identity('71000000-0000-0000-0000-000000000140','inventory.reservation_expiry','71000000-0000-0000-0000-000000000002','71000000-0000-0000-0000-000000000002','71000000-0000-0000-0000-000000000003')$$,
+  'Automation identity scope is not authorized'
+);
+select public.transfer_test_expect_failure(
+  $$select public.require_automation_identity('71000000-0000-0000-0000-000000000140','inventory.reservation_expiry','71000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000003')$$,
+  'Automation identity scope is not authorized'
+);
+select public.transfer_test_expect_failure(
+  $$select public.require_automation_identity('71000000-0000-0000-0000-000000000140','inventory.reservation_expiry','71000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000002','71000000-0000-0000-0000-000000000004')$$,
+  'Automation identity scope is not authorized'
 );
 
 select public.expire_inventory_transfer_reservations(
-  '71000000-0000-0000-0000-000000000005',
+  '71000000-0000-0000-0000-000000000140',
   100
 ) as expiry_first_count
 \gset
@@ -948,17 +1015,17 @@ select public.transfer_test_assert(
   and (select status from public.inventory_transfers where id='71000000-0000-0000-0000-000000000101')='draft'
   and (select public.inventory_transfer_reservation_remaining('71000000-0000-0000-0000-000000000104'))=0
   and (select count(*) from public.inventory_reservation_events where reservation_id='71000000-0000-0000-0000-000000000104')=:'expiry_before_legacy_events'::int
-  and (select count(*) from public.inventory_reservation_adjustments where reservation_id='71000000-0000-0000-0000-000000000104' and adjustment_type='expiry_released' and quantity_base=1 and created_by='71000000-0000-0000-0000-000000000005')=1
-  and (select count(*) from public.inventory_commands where requester_id='71000000-0000-0000-0000-000000000005' and idempotency_key='reservation-expiry:71000000-0000-0000-0000-000000000104' and command_type='transfer_reservation_expire' and status='posted' and payload->>'result_reservation_id'='71000000-0000-0000-0000-000000000104')=1
-  and (select count(*) from public.inventory_transfer_events where transfer_id='71000000-0000-0000-0000-000000000101' and actor_id='71000000-0000-0000-0000-000000000005' and action='inventory.transfer_reservation_expired')=1
-  and (select count(*) from public.audit_events where entity_type='inventory_transfer' and entity_id='71000000-0000-0000-0000-000000000101' and actor_id='71000000-0000-0000-0000-000000000005' and action='inventory.transfer_reservation_expired')=1
+  and (select count(*) from public.inventory_reservation_adjustments where reservation_id='71000000-0000-0000-0000-000000000104' and adjustment_type='expiry_released' and quantity_base=1 and created_by='71000000-0000-0000-0000-000000000140')=1
+  and (select count(*) from public.inventory_commands where requester_id='71000000-0000-0000-0000-000000000140' and idempotency_key='reservation-expiry:71000000-0000-0000-0000-000000000104' and command_type='transfer_reservation_expire' and status='posted' and payload->>'result_reservation_id'='71000000-0000-0000-0000-000000000104')=1
+  and (select count(*) from public.inventory_transfer_events where transfer_id='71000000-0000-0000-0000-000000000101' and actor_id='71000000-0000-0000-0000-000000000140' and action='inventory.transfer_reservation_expired')=1
+  and (select count(*) from public.audit_events where entity_type='inventory_transfer' and entity_id='71000000-0000-0000-0000-000000000101' and actor_id='71000000-0000-0000-0000-000000000140' and action='inventory.transfer_reservation_expired')=1
   and (select count(*) from public.inventory_ledger_entries where batch_id='71000000-0000-0000-0000-000000000077')=:'expiry_before_ledger'::int
   and (select count(*) from public.inventory_balance_projections where batch_id='71000000-0000-0000-0000-000000000077')=:'expiry_before_projections'::int,
   'expiry writes one actor-attributed adjustment, command, event and audit without legacy or physical accounting effects'
 );
 
 select public.expire_inventory_transfer_reservations(
-  '71000000-0000-0000-0000-000000000005',
+  '71000000-0000-0000-0000-000000000140',
   100
 ) as expiry_replay_count
 \gset
@@ -966,10 +1033,33 @@ select public.expire_inventory_transfer_reservations(
 select public.transfer_test_assert(
   :'expiry_replay_count'::int=0
   and (select count(*) from public.inventory_reservation_adjustments where reservation_id='71000000-0000-0000-0000-000000000104' and adjustment_type='expiry_released')=1
-  and (select count(*) from public.inventory_commands where requester_id='71000000-0000-0000-0000-000000000005' and idempotency_key='reservation-expiry:71000000-0000-0000-0000-000000000104')=1
+  and (select count(*) from public.inventory_commands where requester_id='71000000-0000-0000-0000-000000000140' and idempotency_key='reservation-expiry:71000000-0000-0000-0000-000000000104')=1
   and (select count(*) from public.inventory_transfer_events where transfer_id='71000000-0000-0000-0000-000000000101' and action='inventory.transfer_reservation_expired')=1
   and (select count(*) from public.audit_events where entity_type='inventory_transfer' and entity_id='71000000-0000-0000-0000-000000000101' and action='inventory.transfer_reservation_expired')=1,
   'expiry replay has no duplicate command, adjustment, event or audit effect'
+);
+select public.transfer_test_expect_failure(
+  $$update public.automation_identities set display_name='repurposed' where id=(select id from public.automation_identities where principal_id='71000000-0000-0000-0000-000000000140')$$,
+  'Automation identity records are immutable'
+);
+select public.transfer_test_expect_failure(
+  $$delete from public.automation_identities where principal_id='71000000-0000-0000-0000-000000000140'$$,
+  'Automation identity records cannot be deleted'
+);
+select public.deactivate_automation_identity(
+  :'expiry_automation_identity'::uuid,
+  '71000000-0000-0000-0000-000000000005',
+  'test rotation'
+);
+select public.transfer_test_assert(
+  (select not active and deactivated_by='71000000-0000-0000-0000-000000000005' and deactivation_reason='test rotation' from public.automation_identities where id=:'expiry_automation_identity'::uuid)
+  and (select count(*) from public.audit_events where entity_type='automation_identity' and entity_id=:'expiry_automation_identity'::uuid and actor_id='71000000-0000-0000-0000-000000000005' and action='automation_identity.deactivated')=1
+  and (select count(*) from public.inventory_commands where requester_id='71000000-0000-0000-0000-000000000140' and idempotency_key='reservation-expiry:71000000-0000-0000-0000-000000000104' and status='posted')=1,
+  'deactivation preserves historical automation attribution'
+);
+select public.transfer_test_expect_failure(
+  $$select public.expire_inventory_transfer_reservations('71000000-0000-0000-0000-000000000140',100)$$,
+  'Automation identity is inactive'
 );
 reset role;
 
