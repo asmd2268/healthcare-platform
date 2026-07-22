@@ -1,7 +1,11 @@
+import path from 'node:path';
 import type {NextConfig} from 'next';
 import createNextIntlPlugin from 'next-intl/plugin';
 
 const nextConfig: NextConfig = {
+  turbopack: {
+    root: path.resolve(__dirname, '../..'),
+  },
   poweredByHeader: false,
   transpilePackages: ['@healthcare/ui', '@healthcare/auth', '@healthcare/database', '@healthcare/permissions', '@healthcare/localization', '@healthcare/branding', '@healthcare/audit', '@healthcare/workflow', '@healthcare/configuration', '@healthcare/inspections', '@healthcare/medication-errors', '@healthcare/platform-administration'],
   async headers() {

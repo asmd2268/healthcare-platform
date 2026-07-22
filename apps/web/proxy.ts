@@ -6,7 +6,7 @@ import {authenticationRequired,protectedRouteSegments} from './lib/auth-policy';
 
 const intlMiddleware=createMiddleware({locales,defaultLocale,localePrefix:'always'});
 
-export default async function middleware(request:NextRequest){
+export default async function proxy(request:NextRequest){
   const response=intlMiddleware(request); const [,locale,segment]=request.nextUrl.pathname.split('/');
   if(!locales.includes(locale as (typeof locales)[number])||!protectedRouteSegments.has(segment))return response;
   const supabaseUrl=process.env.NEXT_PUBLIC_SUPABASE_URL; const anonKey=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
