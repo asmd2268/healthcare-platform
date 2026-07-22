@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "NEXT_IGNORE_INCORRECT_LOCKFILE=1 next build",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -22,10 +22,10 @@
     "@healthcare/ui": "0.1.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.49.0",
-    "next": "^15.2.0",
+    "next": "16.2.11",
     "next-intl": "^4.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "zod": "^3.24.0"
   },
   "devDependencies": {
