@@ -23,6 +23,7 @@
     "test:sql:local": "bash scripts/run-local-sql-tests.sh"
   },
   "devDependencies": {
+    "eslint": "^10.8.0",
     "supabase": "^2.109.1"
   },
   "overrides": {
