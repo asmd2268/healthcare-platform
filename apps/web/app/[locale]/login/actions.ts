@@ -3,11 +3,9 @@ import {redirect} from 'next/navigation';
 import {createServerUserSupabaseClient} from '@/lib/supabase-server';
 import {serverUserEnvironment} from '@/lib/env';
 import {passwordResetRedirect,safeLocale} from '@/lib/auth-redirect';
+import type {AuthActionState} from '@/lib/auth-state';
 
-export type AuthActionState={error:string|null};
-const initialState:AuthActionState={error:null};
-export {initialState};
-const safeError=()=>({error:'authFailed'});
+const safeError=():AuthActionState=>({error:'authFailed'});
 export async function signInAction(_state:AuthActionState,formData:FormData):Promise<AuthActionState>{
   const email=String(formData.get('email')??'').trim(); const password=String(formData.get('password')??''); const locale=safeLocale(formData.get('locale'));
   if(!email||!password)return safeError();
