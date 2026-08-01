@@ -4,11 +4,13 @@ This repository contains the shared foundation and the first operational module 
 
 ## Current status
 
-The Core Platform Foundation is implemented: bilingual shell, initial design system, secure configuration boundaries, and shared contracts. A secure development-ready Supabase/PostgreSQL foundation now adds versioned migrations, Supabase Auth session checks, RLS contracts, platform roles, administration persistence schema, audit-event storage, and fictional local seeds. Notifications, file upload, workflow execution, permanent deletion, and audit undo remain explicit non-production placeholders. The permanent requirements remain in [PROJECT_BIBLE.md](PROJECT_BIBLE.md).
+The Core Platform Foundation is implemented: bilingual shell, initial design system, secure configuration boundaries, and shared contracts. A secure development-ready Supabase/PostgreSQL foundation adds versioned migrations, Supabase Auth session checks, RLS contracts, platform roles, administration persistence schema, audit-event storage, and fictional local seeds. The commercial foundation now adds server-enforced deployment editions, scoped module subscriptions, and inherited White Label branding without weakening authentication, permissions, or RLS. Notifications, file upload, workflow execution, permanent deletion, audit undo, and payment-provider integration remain explicit non-production placeholders. The permanent requirements remain in [PROJECT_BIBLE.md](PROJECT_BIBLE.md).
 
 ## Repository map
 
 See [the project structure guide](docs/PROJECT_STRUCTURE.md) for ownership and intended use of each top-level directory.
+
+Sellable full-platform and focused-module presets live in [`deployments/`](deployments/README.md). See [White Label, deployment editions, and subscriptions](docs/WHITE_LABEL_AND_LICENSING.md) for enforcement, provisioning, branding inheritance, and rollout rules.
 
 ## Source of truth
 

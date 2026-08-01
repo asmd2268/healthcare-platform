@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
     root: path.resolve(__dirname, '../..'),
   },
   poweredByHeader: false,
-  transpilePackages: ['@healthcare/ui', '@healthcare/auth', '@healthcare/database', '@healthcare/permissions', '@healthcare/localization', '@healthcare/branding', '@healthcare/audit', '@healthcare/workflow', '@healthcare/configuration', '@healthcare/inspections', '@healthcare/medication-errors', '@healthcare/platform-administration'],
+  transpilePackages: ['@healthcare/ui', '@healthcare/auth', '@healthcare/database', '@healthcare/permissions', '@healthcare/localization', '@healthcare/branding', '@healthcare/licensing', '@healthcare/audit', '@healthcare/workflow', '@healthcare/configuration', '@healthcare/inspections', '@healthcare/medication-errors', '@healthcare/platform-administration'],
   async headers() {
     return [{
       source: '/:path*',

@@ -16,4 +16,6 @@ CI في `.github/workflows/ci.yml` يعمل على Pull Requests وفروع `mai
 
 يضيف أساس Supabase اختبارات fail-closed للمصادقة، محتوى migration وRLS غير المتساهل، حماية الإصدارات المنشورة، وضمانات طلب الحذف. يضيف `supabase/tests/202607130002_hardening.sql` سيناريوهات bootstrap المتكرر، ورفض cross-tenant hierarchy، ورفض trusted-audit للمستخدمين غير المصرح لهم، وعزل organization/facility، وعرض المنشور فقط. لا يمكن اعتبار اختبار migration أو RLS التشغيلي ناجحًا إلا عند توفر Supabase CLI وDocker وتشغيل قاعدة محلية Disposable؛ لم يُنفذ ذلك في هذه البيئة عند غياب الأداتين.
 
+يغطي `apps/web/tests/commercial-foundation.test.ts` تقاطع نسخة النشر مع الاشتراك، والنسخ المحددة، ودمج العلامة، ووجود حواجز المسارات الخادمية وعدم استيراد service role. ويغطي `supabase/tests/011_white_label_licensing.executable.sql` الاشتراك النشط والمنتهي، عزل المستأجر، وراثة العلامة، منع التحديث غير المصرح، تعارض revision، التدقيق، وإرجاع العلامة العامة الآمنة للنطاق الموثق.
+
 تغطي اختبارات `supabase-target-safety` متغيرات Staging المطلوبة، رفض الأهداف التي تبدو إنتاجية، ورفض reset خارج بيئة local/staging. التحقق التشغيلي من Supabase منفصل يدويًا وفق [STAGING_VALIDATION.md](STAGING_VALIDATION.md).

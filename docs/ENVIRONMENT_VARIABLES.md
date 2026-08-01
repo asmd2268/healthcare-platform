@@ -13,3 +13,9 @@
 لا ترفع `.env.local` إلى GitHub، ولا تسجل المفاتيح أو Tokens أو كلمات المرور. التطبيق يعمل دون إعداد Supabase في هذه المرحلة؛ تفشل الميزة التي تستدعي عميلًا غير مُعد بوضوح عند الاستدعاء فقط. لا تُنشأ جداول ولا تتصل أي بيئة بقاعدة إنتاج.
 
 لـStaging استخدم `.env.staging.example` كقائمة أسماء فقط، واضبط `SUPABASE_ENV=staging` صراحة. لا تتشارك ملفات local أو staging أو production، ولا تضع قيمها في GitHub Actions logs. راجع [STAGING_VALIDATION.md](STAGING_VALIDATION.md) قبل link أو migration أو seed.
+
+## النسخ التجارية وWhite Label
+
+متغيرات `PLATFORM_*` الجديدة إعدادات خادمية غير سرية، ولا يبدأ أي منها بـ`NEXT_PUBLIC_`. يحدد `PLATFORM_DEPLOYMENT_PROFILE` إحدى النسخ `full` أو `inventory` أو `quality` أو `medication-safety` أو `custom`. النسخة `custom` تستخدم `PLATFORM_DEPLOYMENT_MODULES` كقائمة allowlist. يحدد `PLATFORM_LICENSE_ENFORCEMENT` القيمة `disabled` المتوافقة خلفيًا أو `strict` التي تقاطع وحدات النسخة مع اشتراك قاعدة البيانات النشط.
+
+تضبط قيم `PLATFORM_BRAND_*` و`PLATFORM_ORGANIZATION_NAME_*` و`PLATFORM_PRIMARY_COLOR` و`PLATFORM_ACCENT_COLOR` و`PLATFORM_SHOW_DEVELOPER_ATTRIBUTION` علامة fallback الخاصة بنسخة نشر مستقلة. لا تضع مفاتيح دفع أو أسرار تراخيص أو بيانات عميل فيها. القوالب الآمنة الجاهزة موجودة في [`deployments/`](../deployments/README.md)، والتفاصيل في [White Label والترخيص](WHITE_LABEL_AND_LICENSING.md).
