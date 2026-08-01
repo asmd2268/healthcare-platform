@@ -10,7 +10,7 @@ The Core Platform Foundation is implemented: bilingual shell, initial design sys
 
 See [the project structure guide](docs/PROJECT_STRUCTURE.md) for ownership and intended use of each top-level directory.
 
-Sellable full-platform and focused-module presets live in [`deployments/`](deployments/README.md). See [White Label, deployment editions, and subscriptions](docs/WHITE_LABEL_AND_LICENSING.md) for enforcement, provisioning, branding inheritance, and rollout rules.
+Commercial full-platform and focused-module presets live in [`deployments/`](deployments/README.md). Presets are packaging controls, not a claim that every module is production-ready. See [White Label, deployment editions, and subscriptions](docs/WHITE_LABEL_AND_LICENSING.md) for enforcement, provisioning, branding inheritance, and rollout rules. The Arabic [sales and subscription playbook](docs/SALES_AND_SUBSCRIPTION_PLAYBOOK_AR.md) defines what may be sold now, package/pricing rules, and customer-facing boundaries; the [subscription operations runbook](docs/SUBSCRIPTION_OPERATIONS_RUNBOOK_AR.md) provides the exact activation, renewal, suspension, cancellation, and readiness process.
 
 ## Source of truth
 

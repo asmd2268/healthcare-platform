@@ -10,6 +10,13 @@ The platform supports two independent server-side commercial controls:
 In strict mode, effective module access is their intersection. Authentication,
 RBAC, scope checks, and RLS remain mandatory after licensing succeeds.
 
+Commercial presets do not by themselves certify a module as production-ready.
+Before quoting or activating a customer, use the Arabic
+[sales and subscription playbook](SALES_AND_SUBSCRIPTION_PLAYBOOK_AR.md) and
+[subscription operations runbook](SUBSCRIPTION_OPERATIONS_RUNBOOK_AR.md). They
+define the current readiness gates, price structure, approvals, and exact
+operational lifecycle.
+
 ## Ready deployment editions
 
 Safe presets live in [`deployments/`](../deployments/README.md):
