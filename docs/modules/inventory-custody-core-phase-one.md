@@ -1,8 +1,10 @@
 # Inventory & Custody Core — Phase One
 
-Phase One provides the reusable, tenant-scoped inventory foundation. It does
-not implement transfers, custody, reservations, reconciliation, wastage,
-imports, CAPA adapters, or an operational user interface.
+Phase One provides the reusable, tenant-scoped inventory foundation. Transfers
+and reservations were added in Phase Two. An authenticated bilingual read-only
+web foundation now exposes RLS-authorized locations and positive balance
+projections; it does not implement custody, reconciliation, wastage, imports,
+CAPA adapters, or inventory write actions.
 
 ## Data model
 
@@ -37,8 +39,10 @@ transaction.
 
 ## Deferred work
 
-Transfers and protected transit movements, reservations, custody assignment and
-handover, controlled-drug segregation workflows, imports, reconciliation,
-adjustments, wastage, CAPA adapters, and UI are intentionally deferred to later
-phases. Hash chaining is also deferred: without external anchoring it would be
-only an integrity indicator, not a complete tamper-proof guarantee.
+Custody assignment and handover, controlled-drug segregation workflows,
+imports, reconciliation, operational adjustments, wastage, CAPA adapters,
+notifications, printing, reporting, and all inventory write UI remain deferred.
+The implemented read-only UI uses the current Supabase user session, explicit
+server-side scope/permission preflight, and existing RLS policies; it never uses
+the service role. Hash chaining is also deferred: without external anchoring it
+would be only an integrity indicator, not a complete tamper-proof guarantee.

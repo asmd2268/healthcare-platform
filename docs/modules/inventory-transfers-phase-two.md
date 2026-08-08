@@ -49,6 +49,17 @@ Only controlled `SECURITY DEFINER` functions are executable by authenticated use
 
 Closing post-issue demand requires the dedicated `inventory.transfer.close_remainder` permission; `inventory.transfer.cancel` does not grant closure authority.
 
+## Read-only web foundation
+
+The bilingual web application now lists authorized facility transfers with
+search and status filters and shows transfer status, lines, exact allocations,
+derived reservation remaining, operations, receipt destinations, remainder
+closures, and a limited event timeline. Reads use the signed-in Supabase session
+and existing table RLS. The server fails closed without a facility membership or
+read permission, re-applies the active tenant/organization/facility scope, and
+does not return event metadata or actor identities. No transfer mutation or
+action-shaped placeholder is exposed.
+
 ## Deferred
 
-Cross-facility transfers, supplier receipt/procurement, custody, controlled wastage approval, attachments/imports, CAPA adapters, UI, notifications, printing, and reporting remain out of scope. Legacy reservation-event backfill, standalone manual release, and correction/reversal adjustments remain deferred.
+Cross-facility transfers, supplier receipt/procurement, custody, controlled wastage approval, attachments/imports, CAPA adapters, all operational write UI, notifications, printing, and reporting remain out of scope. Legacy reservation-event backfill, standalone manual release, and correction/reversal adjustments remain deferred.

@@ -1,6 +1,6 @@
 # Healthcare Platform
 
-This repository is the foundation for a commercial, modular healthcare operations platform. The shared Next.js core now lives in `apps/web`; no healthcare business module has been implemented.
+This repository contains the shared foundation and the first operational module foundations for a commercial, modular healthcare operations platform. The shared Next.js core lives in `apps/web`; Inventory & Custody Core now includes an authenticated, RLS-protected read-only interface for locations, balances, transfers, and transfer detail.
 
 ## Current status
 
@@ -27,6 +27,10 @@ For local Supabase, run the supported CLI workflow only against a disposable env
 The shared [Workflow Engine](docs/WORKFLOW_ENGINE.md) establishes reusable versions, transitions, tasks, approvals, comments, events, and SLA/reminder contracts. Module adapters are intentionally limited until each module adopts the engine without weakening existing safeguards.
 
 The shared Reporting and Analytics Engine provides versioned report/dashboard contracts, scoped RLS schema, bilingual administration placeholders, and reusable widget components. It does not replace existing module dashboards or execute production report queries yet.
+
+## Inventory & Custody Core
+
+The inventory ledger, balance projection, facility-transfer lifecycle, reservation accounting, deterministic locking, and reservation-expiry worker are implemented in PostgreSQL. The web application now provides a bilingual read-only inventory foundation using the signed-in Supabase session and database RLS; it does not expose create, issue, receive, reject, return, dispose, cancel, or remainder-closing actions. Notifications, printing, reporting, import/export, custody workflows, and operational write UI remain deferred. See [Phase One](docs/modules/inventory-custody-core-phase-one.md) and [Phase Two](docs/modules/inventory-transfers-phase-two.md).
 
 ## Department Inspections foundation
 
