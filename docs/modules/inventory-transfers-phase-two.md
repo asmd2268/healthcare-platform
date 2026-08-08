@@ -49,7 +49,7 @@ Only controlled `SECURITY DEFINER` functions are executable by authenticated use
 
 Closing post-issue demand requires the dedicated `inventory.transfer.close_remainder` permission; `inventory.transfer.cancel` does not grant closure authority.
 
-## Read-only web foundation
+## Web foundation and transfer operations
 
 The bilingual web application now lists authorized facility transfers with
 search and status filters and shows transfer status, lines, exact allocations,
@@ -62,4 +62,6 @@ action-shaped placeholder is exposed.
 
 ## Deferred
 
-Cross-facility transfers, supplier receipt/procurement, custody, controlled wastage approval, attachments/imports, CAPA adapters, all operational write UI, notifications, printing, and reporting remain out of scope. Legacy reservation-event backfill, standalone manual release, and correction/reversal adjustments remain deferred.
+The bilingual web foundation now includes server-enforced transfer operations for create, reserve, issue, receive, reject, return, dispose rejected stock, cancel, and close remainder. The UI only presents actions allowed by the current scope and transfer state; the server rechecks permission, scope, RLS visibility, idempotency, and workflow invariants before calling the existing database functions. No service role is used in the browser and no direct table mutation is exposed.
+
+Cross-facility transfers, supplier receipt/procurement, custody, controlled wastage approval, attachments/imports, CAPA adapters, notifications, printing, and reporting remain deferred. Legacy reservation-event backfill, standalone manual release, and correction/reversal adjustments remain deferred.
