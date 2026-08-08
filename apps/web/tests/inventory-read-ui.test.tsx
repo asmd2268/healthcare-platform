@@ -6,6 +6,7 @@ import {NextIntlClientProvider} from 'next-intl';
 import {describe, expect, it} from 'vitest';
 import {InventoryLocationsView, InventoryTransferDetailView} from '@/components/inventory/read-only-workspace';
 import type {InventoryTransferDetail} from '@/features/inventory/repository';
+import {emptyTransferCapabilities} from '@/features/inventory/mutations';
 
 Object.assign(globalThis, {React});
 
@@ -25,9 +26,9 @@ describe('inventory read-only UI', () => {
   });
 
   it('renders a transfer detail with no inventory mutation controls', () => {
-    const html = renderToStaticMarkup(<NextIntlClientProvider locale="en" messages={messages('en')}><InventoryTransferDetailView transfer={transfer}/></NextIntlClientProvider>);
+    const html = renderToStaticMarkup(<NextIntlClientProvider locale="en" messages={messages('en')}><InventoryTransferDetailView transfer={transfer} locations={[]} capabilities={emptyTransferCapabilities()}/></NextIntlClientProvider>);
     expect(html).toContain('<h1>Transfer 12345678</h1>');
     expect(html).not.toContain('<button');
-    expect(html).toContain('exposes no stock or transfer actions');
+    expect(html).toContain('Operations are re-authorized on the server');
   });
 });
