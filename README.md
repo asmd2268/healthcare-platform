@@ -1,6 +1,6 @@
 # Healthcare Platform
 
-This repository contains the shared foundation and the first operational module foundations for a commercial, modular healthcare operations platform. The shared Next.js core lives in `apps/web`; Inventory & Custody Core now includes an authenticated, RLS-protected read-only interface for locations, balances, transfers, and transfer detail.
+This repository contains the shared foundation and the first operational module foundations for a commercial, modular healthcare operations platform. The shared Next.js core lives in `apps/web`; Inventory & Custody Core now includes authenticated, RLS-protected inventory views and server-enforced transfer operations.
 
 ## Current status
 
@@ -30,7 +30,7 @@ The shared Reporting and Analytics Engine provides versioned report/dashboard co
 
 ## Inventory & Custody Core
 
-The inventory ledger, balance projection, facility-transfer lifecycle, reservation accounting, deterministic locking, and reservation-expiry worker are implemented in PostgreSQL. The web application now provides a bilingual read-only inventory foundation using the signed-in Supabase session and database RLS; it does not expose create, issue, receive, reject, return, dispose, cancel, or remainder-closing actions. Notifications, printing, reporting, import/export, custody workflows, and operational write UI remain deferred. See [Phase One](docs/modules/inventory-custody-core-phase-one.md) and [Phase Two](docs/modules/inventory-transfers-phase-two.md).
+The inventory ledger, balance projection, facility-transfer lifecycle, reservation accounting, deterministic locking, and reservation-expiry worker are implemented in PostgreSQL. The web application provides bilingual inventory views plus server-enforced transfer operations for creation, reservation, issue, receipt, rejection, return, disposal, cancellation, and remainder closure. Every operation uses the signed-in Supabase session, RLS, permission preflight, idempotency, and database state/concurrency checks; no service role is exposed to the browser. Notifications, printing, reporting, import/export, custody workflows, and cross-facility extensions remain deferred. See [Phase One](docs/modules/inventory-custody-core-phase-one.md) and [Phase Two](docs/modules/inventory-transfers-phase-two.md).
 
 ## Department Inspections foundation
 
