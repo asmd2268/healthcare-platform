@@ -16,6 +16,7 @@ function InventoryNav() {
     <Link href={`/${locale}/inventory`}>{t('locations')}</Link>
     <Link href={`/${locale}/inventory/balances`}>{t('balances')}</Link>
     <Link href={`/${locale}/inventory/transfers`}>{t('transfers')}</Link>
+    <Link href={`/${locale}/inventory/activity`}>{t('activity')}</Link>
   </nav>;
 }
 
