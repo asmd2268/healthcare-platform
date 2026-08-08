@@ -19,3 +19,6 @@ export async function requirePlatformPermission(permission:string,scope:{tenantI
   const {data:permissionAllowed,error:permissionError}=await supabase.rpc('has_platform_permission',{permission_key:permission,target_tenant:scope.tenantId,target_organization:scope.organizationId??null,target_facility:scope.facilityId??null});
   if(scopeError||permissionError||!scopeAllowed||!permissionAllowed)throw new AuthorizationDeniedError();
 }
+export async function canPlatformPermission(permission:string,scope:{tenantId:string;organizationId?:string|null;facilityId?:string|null}){
+  try{await requirePlatformPermission(permission,scope);return true;}catch{return false;}
+}
